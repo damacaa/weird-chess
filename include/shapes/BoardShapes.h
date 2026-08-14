@@ -14,13 +14,109 @@ namespace wchess
 {
 	namespace BoardShapes
 	{
+		// Custom SDF for Approach 2: Stippled / Halftone dot matrix inside square
+		struct StippledSquareSDF : public IMathExpression
+		{
+			[[nodiscard]]
+			float getValue(const float* parameters) const override
+			{
+				float px = parameters[0];
+				float py = parameters[1];
+				float hw = parameters[2];
+				float spacing = parameters[3];
+				float radius = parameters[4];
+				float border = parameters[5];
+
+				float worldX = parameters[Primitives::WORLD_X];
+				float worldY = parameters[Primitives::WORLD_Y];
+
+				float dx = std::abs(worldX - px) - hw;
+				float dy = std::abs(worldY - py) - hw;
+				float d_box = std::max(dx, dy);
+
+				float lx = (worldX - px) + 0.5f * spacing;
+				float ly = (worldY - py) + 0.5f * spacing;
+				float mx = std::fmod(std::fmod(lx, spacing) + spacing, spacing) - 0.5f * spacing;
+				float my = std::fmod(std::fmod(ly, spacing) + spacing, spacing) - 0.5f * spacing;
+				float d_dots = std::sqrt(mx * mx + my * my) - radius;
+
+				float d_stipple = std::max(d_box, d_dots);
+				if (border > 0.0f)
+				{
+					float d_border = std::abs(d_box) - border;
+					return std::min(d_border, d_stipple);
+				}
+				return d_stipple;
+			}
+
+			[[nodiscard]]
+			std::string print() const override
+			{
+				// var0: px, var1: py, var2: hw, var3: spacing, var4: radius, var5: border
+				// var9: worldX (p.x), var10: worldY (p.y)
+				return "min(abs(max(abs(var9 - var0) - var2, abs(var10 - var1) - var2)) - var5, "
+					   "max(max(abs(var9 - var0) - var2, abs(var10 - var1) - var2), "
+					   "length(mod(vec2(var9 - var0, var10 - var1) + (0.5 * var3), var3) - (0.5 * var3)) - var4))";
+			}
+		};
+
+		// Custom SDF for Approach 3: Concentric Inset Rings / Grooves inside square
+		struct ConcentricSquareSDF : public IMathExpression
+		{
+			[[nodiscard]]
+			float getValue(const float* parameters) const override
+			{
+				float px = parameters[0];
+				float py = parameters[1];
+				float hw = parameters[2];
+				float spacing = parameters[3];
+				float thickness = parameters[4];
+
+				float worldX = parameters[Primitives::WORLD_X];
+				float worldY = parameters[Primitives::WORLD_Y];
+
+				float dx = std::abs(worldX - px) - hw;
+				float dy = std::abs(worldY - py) - hw;
+				float d_box = std::max(dx, dy);
+
+				float dist_in = -d_box;
+				if (dist_in > 0.0f)
+				{
+					float shifted = dist_in + 0.5f * spacing;
+					float m = std::fmod(std::fmod(shifted, spacing) + spacing, spacing) - 0.5f * spacing;
+					float ring = std::abs(m) - thickness;
+					return std::max(d_box, ring);
+				}
+				return d_box;
+			}
+
+			[[nodiscard]]
+			std::string print() const override
+			{
+				// var0: px, var1: py, var2: hw, var3: spacing, var4: thickness
+				// Outer box: max(abs(var9 - var0) - var2, abs(var10 - var1) - var2)
+				// Nested rings: abs(mod(-(max(abs(var9 - var0) - var2, abs(var10 - var1) - var2)) + (0.5 * var3), var3)
+				// - (0.5 * var3)) - var4
+				return "max(max(abs(var9 - var0) - var2, abs(var10 - var1) - var2), "
+					   "abs(mod(-(max(abs(var9 - var0) - var2, abs(var10 - var1) - var2)) + (0.5 * var3), var3) - "
+					   "(0.5 * var3)) - var4)";
+			}
+		};
+
+		inline ShapeId s_stippleShapeId = 0;
+		inline ShapeId s_concentricShapeId = 0;
+
+		inline void registerAll(ShapeService& shapes)
+		{
+			s_stippleShapeId = shapes.registerSDF(std::make_shared<StippledSquareSDF>());
+			s_concentricShapeId = shapes.registerSDF(std::make_shared<ConcentricSquareSDF>());
+		}
+
 		// Light and dark square material ids (palette slots, see globals.h).
 		inline constexpr uint16_t LIGHT = ChessPalette::LightSquare;
 		inline constexpr uint16_t DARK = ChessPalette::DarkSquare;
 
-		// Creates the 64 square entities + 64 highlight overlays. Squares are
-		// border-only (BOX_LINE) so they never cover the pieces with a filled
-		// interior. Returns the square entities in index order (a1=0 ... h8=63).
+		// Creates the 64 square entities + 64 highlight overlays.
 		inline std::vector<Entity> createBoard(Registry& registry, ShapeService& shapes,
 											   std::vector<Entity>& outHighlights)
 		{
@@ -33,30 +129,8 @@ namespace wchess
 			{
 				int file = index & 7;
 				int rank = index >> 3;
-				vec2 c = PieceShapes::squareCenterWorld(index);
-				bool light = ((file + rank) & 1) == 1;
 
-				// Square border (hollow box) rendered only for light squares.
-				// Kept slightly smaller than cell size (0.46 * CELL) so neighbouring
-				// diagonal boxes never touch or overlap.
-				float hw = ChessConfig::CELL * 0.46f;
-				float thickness = ChessConfig::CELL * 0.045f;
-				Entity square = INVALID_ENTITY;
-				if (light)
-				{
-					square = shapes.addShape({.shapeId = DefaultShapes::BOX_LINE,
-											  .variables = {c.x, c.y, hw, hw, thickness},
-											  .material = LIGHT,
-											  .combination = CombinationType::Addition,
-											  .hasCollision = false,
-											  .group = 0});
-					registry.setComponentDirty(registry.getComponent<CustomShape>(square));
-				}
-				else
-				{
-					square = registry.createEntity();
-				}
-
+				Entity square = registry.createEntity();
 				SquareComp& comp = registry.addComponent<SquareComp>(square);
 				comp.file = file;
 				comp.rank = rank;
@@ -79,38 +153,6 @@ namespace wchess
 				outHighlights.push_back(highlight);
 			}
 			return squares;
-		}
-
-		// Rank labels (1-8) on the left of the board, file labels (a-h) below.
-		// Positions are world-space and provided by the caller (layoutSystem
-		// recomputes them on resize). Returns rank labels then file labels.
-		inline std::vector<Entity> createLabels(Registry& registry)
-		{
-			std::vector<Entity> out;
-			out.reserve(16);
-
-			auto makeLabel = [&](float x, float y, const std::string& text)
-			{
-				Entity e = registry.createEntity();
-				auto& t = registry.addComponent<Transform>(e);
-				t.position = vec3(x, y, 0.0f);
-
-				auto& label = registry.addComponent<TextRenderer>(e);
-				label.text = text;
-				label.material = ChessPalette::PanelTextDim;
-				label.horizontalAlignment = TextRenderer::HorizontalAlignment::Center;
-				label.verticalAlignment = TextRenderer::VerticalAlignment::Center;
-				registry.setComponentDirty(label);
-				return e;
-			};
-
-			for (int rank = 0; rank < 8; ++rank)
-				out.push_back(makeLabel(0.0f, 0.0f, std::to_string(rank + 1)));
-
-			for (int file = 0; file < 8; ++file)
-				out.push_back(makeLabel(0.0f, 0.0f, std::string(1, static_cast<char>('a' + file))));
-
-			return out;
 		}
 
 		// Sets a highlight overlay visible at a square (or hides it when

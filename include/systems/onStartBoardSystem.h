@@ -77,8 +77,75 @@ namespace wchess
 
 		// ---- background + text sizes ----
 		auto& bg = services.render().getBackground();
-		bg.type = BackgroundType::Solid;
-		bg.primaryColor = vec4(0.055f, 0.06f, 0.08f, 1.0f);
+		bg.type = BackgroundType::Custom;
+		DisplaySettings defaultDisplay;
+		bg.primaryColor = defaultDisplay.colorPalette[DisplaySettings::DefaultColors::White];  // Light squares
+		bg.secondaryColor = defaultDisplay.colorPalette[DisplaySettings::DefaultColors::Gray]; // Dark squares
+		bg.customShaderCode = R"(
+			vec3 getBackground(vec2 uv, vec2 worldPos)
+			{
+				// Derive true world position matching the camera framing and SDF foreground shapes.
+				// u_camMatrix[3].xy = -camPos.xy, u_camMatrix[3].z = -camPos.z
+				vec2 trueWorldPos = -u_camMatrix[3].xy + (uv * (-u_camMatrix[3].z));
+
+				const float CELL = 15.0; // ChessConfig::CELL
+				const float BOARD_SIZE = 8.0 * CELL; // 120.0
+
+				// Balatro-style swirling procedural background:
+				// Slow time-based domain warping with contour isolines
+				float t = u_time * 0.15;
+				vec2 p = uv * 2.2;
+
+				for (int i = 1; i <= 3; i++)
+				{
+					float fi = float(i);
+					vec2 np = p;
+					np.x += (0.35 / fi) * sin(fi * 2.4 * p.y + t * 0.7 + fi * 1.3);
+					np.y += (0.35 / fi) * cos(fi * 2.4 * p.x + t * 0.5 + fi * 0.9);
+					p = np;
+				}
+
+				float wave1 = sin(p.x * 2.5 + p.y * 2.0 + t * 0.3);
+				float wave2 = cos(length(p) * 2.2 - t * 0.5);
+				float pattern = sin(wave1 * 3.14159 + wave2 * 2.0);
+				float mask = 0.5 + 0.5 * pattern;
+
+				// Subtle stepped contour lines (posterized bands)
+				float stepped = floor(mask * 7.0) / 7.0;
+				float subtleBands = mix(mask, stepped, 0.15);
+				float bandEdge = 0.5 + 0.5 * sin(mask * 22.0 + t * 0.4);
+
+				// Dark moody palette with rich subtle colors (midnight indigo, deep wine/plum, ocean teal)
+				vec3 darkBase   = vec3(0.030, 0.032, 0.045);
+				vec3 deepPlum   = vec3(0.085, 0.048, 0.110);
+				vec3 oceanTeal  = vec3(0.038, 0.078, 0.105);
+				vec3 glowAccent = vec3(0.160, 0.080, 0.125);
+
+				vec3 tableColor = mix(darkBase, deepPlum, smoothstep(0.1, 0.6, subtleBands));
+				tableColor = mix(tableColor, oceanTeal, smoothstep(0.35, 0.85, sin(p.y * 1.6 + t * 0.25) * 0.5 + 0.5));
+				tableColor = mix(tableColor, glowAccent, smoothstep(0.72, 1.0, subtleBands) * 0.40);
+				tableColor += bandEdge * 0.012;
+
+				float bx = trueWorldPos.x;
+				float by = trueWorldPos.y;
+
+				// Outside the 8x8 board: Balatro table background
+				if (bx < 0.0 || bx > BOARD_SIZE || by < 0.0 || by > BOARD_SIZE)
+				{
+					return tableColor;
+				}
+
+				// Inside 8x8 Board Tiles:
+				vec2 boardCoord = trueWorldPos / CELL;
+				ivec2 cell = ivec2(floor(boardCoord));
+				bool isLight = ((cell.x + cell.y) & 1) == 1;
+
+				// Completely flat solid tiles:
+				vec3 lightColor = u_bgPrimaryColor.rgb;
+				vec3 darkColor  = u_bgSecondaryColor.rgb;
+				return (isLight ? lightColor : darkColor) * u_bgIntensity;
+			}
+			)";
 
 		// World text: single-char labels next to the board.
 		// services.render().getContext2D().dotRadious = 0.01f;
@@ -88,18 +155,14 @@ namespace wchess
 		services.render().getContextUI().dotRadious = 5.0f;
 		services.render().getContextUI().charSpacing = 10.0f;
 
-		// ---- piece SDFs ----
+		// ---- piece & board SDFs ----
 		PieceShapes::registerAll(services.shapes());
+		BoardShapes::registerAll(services.shapes());
 
 		// ---- board ----
 		state.squareEntities = BoardShapes::createBoard(registry, services.shapes(), state.highlightEntities);
 		state.pieceEntities.assign(64, INVALID_ENTITY);
 		MoveSystem::syncPieces(state, registry, services.shapes());
-
-		// ---- labels ----
-		auto labels = BoardShapes::createLabels(registry);
-		state.rankLabels.assign(labels.begin(), labels.begin() + 8);
-		state.fileLabels.assign(labels.begin() + 8, labels.end());
 
 		// ---- right panel (pure story UI) ----
 		// The main header text holds the title of the story

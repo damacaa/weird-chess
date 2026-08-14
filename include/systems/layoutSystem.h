@@ -62,37 +62,6 @@ namespace wchess
 			camTransform.position = cam;
 			registry.setComponentDirty(camTransform);
 
-			// --- world-space rank/file labels ---
-			// 8 rank labels then 8 file labels (order matches creation).
-			const float boardLeftPx = worldToScreenX(cam, halfH, 0.0f);
-			const float boardBottomPx = worldToScreenY(cam, halfH, 0.0f);
-			const float rankLabelPx = std::max(6.0f, boardLeftPx - ChessConfig::RANK_LABEL_GAP_PX);
-			const float fileLabelPx = std::max(6.0f, boardBottomPx - ChessConfig::FILE_LABEL_GAP_PX);
-
-			for (int rank = 0; rank < 8; ++rank)
-			{
-				float wx = screenToWorldX(cam, halfH, rankLabelPx);
-				float wy = static_cast<float>(rank) * ChessConfig::CELL + ChessConfig::CELL * 0.5f;
-				Entity e = state.rankLabels[rank];
-				if (e == INVALID_ENTITY)
-					continue;
-				auto& t = registry.getComponent<Transform>(e);
-				t.position = vec3(wx, wy, 0.0f);
-				registry.setComponentDirty(t);
-			}
-
-			for (int file = 0; file < 8; ++file)
-			{
-				float wx = static_cast<float>(file) * ChessConfig::CELL + ChessConfig::CELL * 0.5f;
-				float wy = screenToWorldY(cam, halfH, fileLabelPx);
-				Entity e = state.fileLabels[file];
-				if (e == INVALID_ENTITY)
-					continue;
-				auto& t = registry.getComponent<Transform>(e);
-				t.position = vec3(wx, wy, 0.0f);
-				registry.setComponentDirty(t);
-			}
-
 			// --- right panel (screen space) ---
 			const float panelLeft = halfW + ChessConfig::PANEL_LEFT_MARGIN_PX;
 			const float panelTop = height - ChessConfig::PANEL_TOP_MARGIN_PX;
