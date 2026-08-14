@@ -1,6 +1,8 @@
-# Weird Chess ♟️📖
+# Weird Chess 
 
 An experimental chess game built on **[weird-engine](https://github.com/damacaa/weird-engine)** (a 2D signed distance field ray-marching engine). 
+
+![Weird Chess Screenshot](docs/assets/screenshot.png)
 
 **Weird Chess** pairs a full chess game with an evolving narrative panel:
 - **Left Panel:** The interactive chessboard, smooth SDF piece rendering, animations, legal move indicators, and game control UI.
