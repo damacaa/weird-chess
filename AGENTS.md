@@ -58,6 +58,8 @@ pipeline + narrator thread. No window or ECS required.
   worker thread. Design doc: `include/narrator/llamacpp-integration.md`.
 - Style: C++20, Allman braces, tabs, 120-column limit (same as weird-engine).
   Run `clang-format -i <file>` after editing.
+- Git commits: DO NOT create git commits automatically unless the user
+  explicitly asks you to commit.
 
 ## Gotchas
 
