@@ -26,82 +26,80 @@ using WeirdEngine::vec2;
 #include <string>
 #include <vector>
 
-namespace wchess {
-struct SquareComp;
-struct PieceComp;
+namespace wchess
+{
+	struct SquareComp;
+	struct PieceComp;
 
-struct ChessState {
-  // ---- rules + AI ----
-  std::shared_ptr<ChessLibBoard> board;
-  std::shared_ptr<IChessAI> ai;
-  std::shared_ptr<AsyncAnnotator>
-      annotator; // background move annotation worker
-  bool moveAppliedPendingAnnotation =
-      false; // a move was applied, annotation still coming
+	struct ChessState
+	{
+		// ---- rules + AI ----
+		std::shared_ptr<ChessLibBoard> board;
+		std::shared_ptr<IChessAI> ai;
+		std::shared_ptr<AsyncAnnotator> annotator; // background move annotation worker
+		bool moveAppliedPendingAnnotation = false; // a move was applied, annotation still coming
 
-  // ---- narrator (worker thread) ----
-  std::shared_ptr<PassThroughNarrator>
-      narratorImpl; // stage 1; stage 2 swaps this for LlamaNarrator
-  std::shared_ptr<NarratorThread> narrator;
+		// ---- narrator (worker thread) ----
+		std::shared_ptr<PassThroughNarrator> narratorImpl; // stage 1; stage 2 swaps this for LlamaNarrator
+		std::shared_ptr<NarratorThread> narrator;
 
-  // ---- board entities ----
-  std::vector<Entity> squareEntities;    // [64]
-  std::vector<Entity> highlightEntities; // [64]
-  std::vector<Entity>
-      pieceEntities;              // [64] (per square; INVALID_ENTITY if empty)
-  std::vector<Entity> rankLabels; // [8] world-space "1".."8"
-  std::vector<Entity> fileLabels; // [8] world-space "a".."h"
+		// ---- board entities ----
+		std::vector<Entity> squareEntities;	   // [64]
+		std::vector<Entity> highlightEntities; // [64]
+		std::vector<Entity> pieceEntities;	   // [64] (per square; INVALID_ENTITY if empty)
+		std::vector<Entity> rankLabels;		   // [8] world-space "1".."8"
+		std::vector<Entity> fileLabels;		   // [8] world-space "a".."h"
 
-  // ---- selection / interaction ----
-  int selectedSquare = -1;
-  std::vector<int> legalTargets; // square indices reachable from selection
+		// ---- selection / interaction ----
+		int selectedSquare = -1;
+		std::vector<int> legalTargets; // square indices reachable from selection
 
-  // ---- game flow ----
-  bool playerIsWhite = true;
-  bool aiThinking = false;
-  bool gameOver = false;
-  bool disableAI = false; // "DISABLE AI" toggle: take control of both sides
-  bool awaitingPromotion = false;
-  int promoFrom = -1;
-  int promoTo = -1;
+		// ---- game flow ----
+		bool playerIsWhite = true;
+		bool aiThinking = false;
+		float aiThinkingTimer = 0.0f;
+		float aiThinkingDuration = 0.0f;
+		bool gameOver = false;
+		bool disableAI = false; // "DISABLE AI" toggle: take control of both sides
+		bool awaitingPromotion = false;
+		int promoFrom = -1;
+		int promoTo = -1;
 
-  // ---- move animations ----
-  std::vector<Entity> animatingPieces; // piece entities currently moving
-  std::vector<vec2> animFrom;
-  std::vector<vec2> animTo;
-  std::vector<float> animT;
+		// ---- move animations ----
+		std::vector<Entity> animatingPieces; // piece entities currently moving
+		std::vector<vec2> animFrom;
+		std::vector<vec2> animTo;
+		std::vector<float> animT;
 
-  // ---- annotations ----
-  MoveAnnotation lastAnnotation;
-  bool hasLastAnnotation = false;
-  // Last applied move, set synchronously in applyMove (the annotation
-  // lags behind on the worker thread; the yellow highlight must not).
-  Move lastMove;
-  bool hasLastMove = false;
-  std::vector<std::string>
-      moveLog; // "12. e4" style lines shown above the board
+		// ---- annotations ----
+		MoveAnnotation lastAnnotation;
+		bool hasLastAnnotation = false;
+		// Last applied move, set synchronously in applyMove (the annotation
+		// lags behind on the worker thread; the yellow highlight must not).
+		Move lastMove;
+		bool hasLastMove = false;
+		std::vector<std::string> moveLog; // "12. e4" style lines shown above the board
 
-  // ---- layout ----
-  int lastResolutionHash = 0;
-  bool layoutDirty = false;
+		// ---- layout ----
+		int lastResolutionHash = 0;
+		bool layoutDirty = false;
 
-  // ---- UI entity handles ----
-  Entity titleText = INVALID_ENTITY;
-  Entity statusText = INVALID_ENTITY; // "WHITE TO MOVE" / last annotation title
-  Entity moveLogText = INVALID_ENTITY; // "12. e4  12... e5"
-  std::vector<Entity> storyLines;      // one UITextRenderer per line
-  int storyVisibleLines = ChessConfig::STORY_MAX_LINES; // set by layoutSystem
-  std::deque<std::string> storyText; // visible story lines (front = top)
-  Entity newGameButton = INVALID_ENTITY;
-  Entity newGameLabel = INVALID_ENTITY;
-  Entity disableAIToggle = INVALID_ENTITY;
-  Entity disableAILabel = INVALID_ENTITY;
-  Entity storyTitle = INVALID_ENTITY;
-  Entity storyStatus = INVALID_ENTITY;
-};
+		// ---- UI entity handles ----
+		Entity titleText = INVALID_ENTITY;
+		Entity statusText = INVALID_ENTITY;					  // "WHITE TO MOVE" / last annotation title
+		Entity moveLogText = INVALID_ENTITY;				  // "12. e4  12... e5"
+		std::vector<Entity> storyLines;						  // one UITextRenderer per line
+		int storyVisibleLines = ChessConfig::STORY_MAX_LINES; // set by layoutSystem
+		std::deque<std::string> storyText;					  // visible story lines (front = top)
+		Entity newGameButton = INVALID_ENTITY;
+		Entity disableAIToggle = INVALID_ENTITY;
+		Entity storyTitle = INVALID_ENTITY;
+		Entity storyStatus = INVALID_ENTITY;
+	};
 
-// The state entity owns exactly one ChessState component.
-inline ChessState &getState(Registry &registry) {
-  return registry.getComponentArray<ChessState>()->getDataAtIdx(0);
-}
+	// The state entity owns exactly one ChessState component.
+	inline ChessState& getState(Registry& registry)
+	{
+		return registry.getComponentArray<ChessState>()->getDataAtIdx(0);
+	}
 } // namespace wchess

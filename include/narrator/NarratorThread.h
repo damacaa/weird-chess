@@ -80,6 +80,12 @@ namespace wchess
 			return m_narrator ? m_narrator->name() : "none";
 		}
 
+		bool busy() const
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			return !m_queue.empty();
+		}
+
 	private:
 		void run()
 		{
@@ -102,7 +108,7 @@ namespace wchess
 		std::shared_ptr<StoryStream> m_stream;
 
 		std::thread m_thread;
-		std::mutex m_mutex;
+		mutable std::mutex m_mutex;
 		std::condition_variable m_cv;
 		std::deque<MoveAnnotation> m_queue;
 		bool m_running = false;

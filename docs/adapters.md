@@ -35,14 +35,15 @@ Implemented by:
 
 | Class | File | Notes |
 |---|---|---|
+| `MinimaxAI` | include/chess/MinimaxAI.h | In-process, C++20 Alpha-Beta search with PeSTO piece-square evaluation and Quiescence search. Default built-in engine for Web (Emscripten) and offline native builds. 100% MIT. |
 | `StockfishUCIAI` | include/chess/StockfishUCIAI.h + src/chess/StockfishUCIAI.cpp | UCI subprocess via SDL3 `SDL_CreateProcess`. Stockfish is NOT linked (GPLv3); it runs as an external process so this project's source stays MIT. |
-| `NullAI` | include/chess/NullAI.h | Built-in fallback: random legal moves + material-count eval. Used when no Stockfish binary is found so the game always runs. |
+| `NullAI` | include/chess/NullAI.h | Minimal test fallback: random legal moves + material-count eval. |
 
 ### Adding your own engine
 
 1. Create `include/chess/MyEngineAI.h` implementing `wchess::IChessAI`.
 2. Construct it in `systems/onStartBoardSystem.h` where `state.ai` is set
-   (currently: try Stockfish, fall back to NullAI).
+   (currently: try Stockfish, fall back to MinimaxAI).
 3. The annotation pipeline (`systems/annotationSystem.h`) and the AI system
    (`systems/aiSystem.h`) need no changes - they only see `IChessAI`.
 

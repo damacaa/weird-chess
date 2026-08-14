@@ -16,49 +16,59 @@
 #include <string>
 #include <thread>
 
-namespace wchess {
-class PassThroughNarrator : public INarrator {
-public:
-  std::string name() const override { return "passthrough"; }
+namespace wchess
+{
+	class PassThroughNarrator : public INarrator
+	{
+	public:
+		std::string name() const override
+		{
+			return "passthrough";
+		}
 
-  void narrate(const MoveAnnotation &annotation, StoryStream &out) override {
-    using namespace std::chrono_literals;
+		void narrate(const MoveAnnotation& annotation, StoryStream& out) override
+		{
+			using namespace std::chrono_literals;
 
-    const std::string mover =
-        annotation.mover == Color::White ? "White" : "Black";
+			const std::string mover = annotation.mover == Color::White ? "White" : "Black";
 
-    std::string moveLine = mover + " (" +
-                           std::to_string(annotation.fullMoveNumber) + ") - " +
-                           annotation.title + " " + annotation.san + " (" +
-                           AnnotationWriter::evalText(annotation) + ")";
+			std::string moveLine = mover + " (" + std::to_string(annotation.fullMoveNumber) + ") - " +
+								   annotation.title + " " + annotation.san + " (" +
+								   AnnotationWriter::evalText(annotation) + ")";
 
-    out.append(moveLine);
-    std::this_thread::sleep_for(
-        40ms); // simulate streaming so the pipeline is visible
+			out.append(moveLine);
+			std::this_thread::sleep_for(5ms); // simulate streaming so the pipeline is visible
 
-    if (!annotation.specialEvent.empty())
-      out.append(annotation.specialEvent);
+			if (!annotation.specialEvent.empty())
+				out.append(annotation.specialEvent);
 
-    if (!annotation.tradeEvent.empty())
-      out.append(annotation.tradeEvent);
+			if (!annotation.tradeEvent.empty())
+				out.append(annotation.tradeEvent);
 
-    if (!annotation.gameStatus.empty())
-      out.append(annotation.gameStatus);
+			if (!annotation.gameStatus.empty())
+				out.append(annotation.gameStatus);
 
-    // Story-length rule: critical blunders and mates stop the story abruptly.
-    if (annotation.tactics.checkmate) {
-      if (annotation.specialEvent.empty())
-        out.append("Checkmate. " + mover + " wins the game.");
-      out.setStatus(StoryStatus::EndedAbruptly);
-    } else if (annotation.quality == MoveQuality::Blunder &&
-               annotation.impact == ImpactLevel::Critical) {
-      out.setStatus(StoryStatus::EndedAbruptly);
-    } else if (annotation.tactics.stalemate || annotation.tactics.draw) {
-      out.append("Game ended in a draw.");
-      out.setStatus(StoryStatus::EndedNaturally);
-    } else {
-      out.setStatus(StoryStatus::Generating);
-    }
-  }
-};
+			// Story-length rule: critical blunders and mates stop the story abruptly.
+			if (annotation.tactics.checkmate || (annotation.gameEnded && annotation.gameState == GameState::Checkmate))
+			{
+				if (annotation.specialEvent.empty())
+					out.append("Checkmate. " + mover + " wins the game.");
+				out.setStatus(StoryStatus::EndedAbruptly);
+			}
+			else if (annotation.quality == MoveQuality::Blunder && annotation.impact == ImpactLevel::Critical)
+			{
+				out.setStatus(StoryStatus::EndedAbruptly);
+			}
+			else if (annotation.tactics.stalemate || annotation.tactics.draw ||
+					 (annotation.gameEnded && annotation.gameState != GameState::Ongoing))
+			{
+				out.append("Game ended in a draw.");
+				out.setStatus(StoryStatus::EndedNaturally);
+			}
+			else
+			{
+				out.setStatus(StoryStatus::Generating);
+			}
+		}
+	};
 } // namespace wchess

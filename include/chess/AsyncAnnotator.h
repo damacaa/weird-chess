@@ -28,246 +28,278 @@
 #include <string>
 #include <thread>
 
-namespace wchess {
-// Everything the worker needs to build one annotation. Captured on the
-// main thread at move time; the worker never touches the live board.
-struct AnnotationJob {
-  std::string beforeFen;
-  std::string afterFen;
-  Move move;
-  Color mover = Color::White;
+namespace wchess
+{
+	// Everything the worker needs to build one annotation. Captured on the
+	// main thread at move time; the worker never touches the live board.
+	struct AnnotationJob
+	{
+		std::string beforeFen;
+		std::string afterFen;
+		Move move;
+		Color mover = Color::White;
 
-  Move prevMove;
-  bool hasPrevMove = false;
+		Move prevMove;
+		bool hasPrevMove = false;
 
-  bool prevEvalValid = false;
-  int prevEval =
-      0; // eval-after of the previous annotation (mover's perspective)
+		bool prevEvalValid = false;
+		int prevEval = 0; // eval-after of the previous annotation (mover's perspective)
 
-  int legalMoveCount = 0; // legal moves in the BEFORE position
-  int fullMoveNumber = 1;
-};
+		int legalMoveCount = 0; // legal moves in the BEFORE position
+		int fullMoveNumber = 1;
 
-namespace AnnotationPipeline {
-// Pure annotation builder: only uses the job + the AI for evaluation.
-// Safe to call from any thread (creates its own scratch boards).
-inline MoveAnnotation build(const AnnotationJob &job, IChessAI &ai) {
-  MoveAnnotation ann;
-  ann.move = job.move;
-  ann.mover = job.mover;
-  ann.fullMoveNumber = job.fullMoveNumber;
+		bool isGameOver = false;
+		GameState gameState = GameState::Ongoing;
+	};
 
-  // --- tactics (pure bitboard analysis, no engine needed) ---
-  ChessLibBoard before;
-  before.setFen(job.beforeFen);
-  ann.tactics = TacticDetector::analyze(before, job.move);
+	namespace AnnotationPipeline
+	{
+		// Pure annotation builder: only uses the job + the AI for evaluation.
+		// Safe to call from any thread (creates its own scratch boards).
+		inline MoveAnnotation build(const AnnotationJob& job, IChessAI& ai)
+		{
+			MoveAnnotation ann;
+			ann.move = job.move;
+			ann.mover = job.mover;
+			ann.fullMoveNumber = job.fullMoveNumber;
 
-  // --- evaluations (from the mover's perspective) ---
-  // eval-before: reuse the previous move's eval-after (negated).
-  if (job.prevEvalValid) {
-    ann.evalBeforeCp = -job.prevEval;
-  } else {
-    Eval beforeEval = ai.evaluate(job.beforeFen, ChessConfig::EVAL_MOVETIME_MS);
-    ann.evalBeforeCp = beforeEval.valid ? beforeEval.centipawns : 0;
-  }
+			// --- tactics (pure bitboard analysis, no engine needed) ---
+			ChessLibBoard before;
+			before.setFen(job.beforeFen);
+			ann.tactics = TacticDetector::analyze(before, job.move);
 
-  // eval-after: evaluate() reports from the side-to-move's
-  // perspective; after the move that is the opponent, so negate.
-  Eval after = ai.evaluate(job.afterFen, ChessConfig::EVAL_MOVETIME_MS);
-  ann.evalAfterCp = after.valid ? -after.centipawns : ann.evalBeforeCp;
+			// --- evaluations (from the mover's perspective) ---
+			// eval-before: reuse the previous move's eval-after (negated).
+			if (job.prevEvalValid)
+			{
+				ann.evalBeforeCp = -job.prevEval;
+			}
+			else
+			{
+				Eval beforeEval = ai.evaluate(job.beforeFen, ChessConfig::EVAL_MOVETIME_MS);
+				ann.evalBeforeCp = beforeEval.valid ? beforeEval.centipawns : 0;
+			}
 
-  // best-move eval of the before position (side to move == mover).
-  Eval best = ai.evaluate(job.beforeFen, ChessConfig::EVAL_MOVETIME_MS);
-  ann.bestMoveCp = best.valid ? best.centipawns : ann.evalBeforeCp;
-  if (best.valid && !best.pv.empty())
-    ann.engineLine = best.pv;
+			// eval-after: evaluate() reports from the side-to-move's
+			// perspective; after the move that is the opponent, so negate.
+			Eval after = ai.evaluate(job.afterFen, ChessConfig::EVAL_MOVETIME_MS);
+			ann.evalAfterCp = after.valid ? -after.centipawns : ann.evalBeforeCp;
 
-  ann.deltaCp = ann.evalAfterCp - ann.evalBeforeCp;
-  ann.lossCp = ann.bestMoveCp - ann.evalAfterCp;
+			// best-move eval of the before position (side to move == mover).
+			Eval best = ai.evaluate(job.beforeFen, ChessConfig::EVAL_MOVETIME_MS);
+			ann.bestMoveCp = best.valid ? best.centipawns : ann.evalBeforeCp;
+			if (best.valid && !best.pv.empty())
+				ann.engineLine = best.pv;
 
-  // Win probability and impact calculation (Chess.com style win chance bar)
-  ann.winChanceBefore = winProbability(ann.evalBeforeCp);
-  ann.winChanceAfter = winProbability(ann.evalAfterCp);
-  ann.winChanceDelta = ann.winChanceAfter - ann.winChanceBefore;
+			ann.deltaCp = ann.evalAfterCp - ann.evalBeforeCp;
+			ann.lossCp = ann.bestMoveCp - ann.evalAfterCp;
 
-  float winShiftAbs = std::abs(ann.winChanceDelta);
-  if (winShiftAbs >= 0.35f || ann.tactics.checkmate)
-    ann.impact = ImpactLevel::Critical;
-  else if (winShiftAbs >= 0.15f)
-    ann.impact = ImpactLevel::Major;
-  else
-    ann.impact = ImpactLevel::Minor;
+			// Win probability and impact calculation (Chess.com style win chance bar)
+			ann.winChanceBefore = winProbability(ann.evalBeforeCp);
+			ann.winChanceAfter = winProbability(ann.evalAfterCp);
+			ann.winChanceDelta = ann.winChanceAfter - ann.winChanceBefore;
 
-  ann.wasBestMove =
-      ann.lossCp <= static_cast<int>(ChessConfig::BEST_LOSS_PAWNS * 100.0f);
-  ann.onlyLegalMove = job.legalMoveCount <= 1;
-  ann.forced = ann.onlyLegalMove;
+			float winShiftAbs = std::abs(ann.winChanceDelta);
+			if (winShiftAbs >= 0.35f || ann.tactics.checkmate)
+				ann.impact = ImpactLevel::Critical;
+			else if (winShiftAbs >= 0.15f)
+				ann.impact = ImpactLevel::Major;
+			else
+				ann.impact = ImpactLevel::Minor;
 
-  // --- classify ---
-  ClassificationInput input;
-  input.evalBeforeCp = ann.evalBeforeCp;
-  input.evalAfterCp = ann.evalAfterCp;
-  input.bestMoveCp = ann.bestMoveCp;
-  input.tactics = ann.tactics;
-  input.move = job.move;
-  input.legalMoveCount = job.legalMoveCount;
-  ann.quality = classify(input);
+			ann.wasBestMove = ann.lossCp <= static_cast<int>(ChessConfig::BEST_LOSS_PAWNS * 100.0f);
+			ann.onlyLegalMove = job.legalMoveCount <= 1;
+			ann.forced = ann.onlyLegalMove;
 
-  // --- decorate with semantic text ---
-  auto movingPiece = before.pieceAt(job.move.from);
-  const char *letter = "";
-  if (movingPiece) {
-    ann.pieceMoved = movingPiece->second;
-    PieceType t = movingPiece->second;
-    letter = t == PieceType::Knight   ? "N"
-             : t == PieceType::Bishop ? "B"
-             : t == PieceType::Rook   ? "R"
-             : t == PieceType::Queen  ? "Q"
-             : t == PieceType::King   ? "K"
-                                      : "";
-  }
+			// --- classify ---
+			ClassificationInput input;
+			input.evalBeforeCp = ann.evalBeforeCp;
+			input.evalAfterCp = ann.evalAfterCp;
+			input.bestMoveCp = ann.bestMoveCp;
+			input.tactics = ann.tactics;
+			input.move = job.move;
+			input.legalMoveCount = job.legalMoveCount;
+			ann.quality = classify(input);
 
-  if (job.move.isEnPassant) {
-    ann.hasCapture = true;
-    ann.pieceCaptured = PieceType::Pawn;
-  } else {
-    auto capturedPiece = before.pieceAt(job.move.to);
-    if (capturedPiece) {
-      ann.hasCapture = true;
-      ann.pieceCaptured = capturedPiece->second;
-    }
-  }
+			// --- decorate with semantic text ---
+			auto movingPiece = before.pieceAt(job.move.from);
+			const char* letter = "";
+			if (movingPiece)
+			{
+				ann.pieceMoved = movingPiece->second;
+				PieceType t = movingPiece->second;
+				letter = t == PieceType::Knight	  ? "N"
+						 : t == PieceType::Bishop ? "B"
+						 : t == PieceType::Rook	  ? "R"
+						 : t == PieceType::Queen  ? "Q"
+						 : t == PieceType::King	  ? "K"
+												  : "";
+			}
 
-  // --- Trade / Exchange Detection ---
-  bool isRecapture =
-      job.hasPrevMove && job.prevMove.isCapture && job.move.isCapture &&
-      (job.move.to == job.prevMove.to || job.move.to == job.prevMove.from);
+			if (job.move.isEnPassant)
+			{
+				ann.hasCapture = true;
+				ann.pieceCaptured = PieceType::Pawn;
+			}
+			else
+			{
+				auto capturedPiece = before.pieceAt(job.move.to);
+				if (capturedPiece)
+				{
+					ann.hasCapture = true;
+					ann.pieceCaptured = capturedPiece->second;
+				}
+			}
 
-  bool isEqualMaterialCapture =
-      ann.hasCapture &&
-      (pieceValue(ann.pieceMoved) == pieceValue(ann.pieceCaptured) ||
-       (ann.pieceMoved == PieceType::Bishop &&
-        ann.pieceCaptured == PieceType::Knight) ||
-       (ann.pieceMoved == PieceType::Knight &&
-        ann.pieceCaptured == PieceType::Bishop));
+			// --- Trade / Exchange Detection ---
+			bool isRecapture = job.hasPrevMove && job.prevMove.isCapture && job.move.isCapture &&
+							   (job.move.to == job.prevMove.to || job.move.to == job.prevMove.from);
 
-  ann.isTrade = ann.hasCapture && (isRecapture || isEqualMaterialCapture);
-  ann.isRecapture = isRecapture;
-  ann.isQueenTrade = ann.hasCapture && ann.pieceMoved == PieceType::Queen &&
-                     ann.pieceCaptured == PieceType::Queen;
+			bool isEqualMaterialCapture =
+				ann.hasCapture && (pieceValue(ann.pieceMoved) == pieceValue(ann.pieceCaptured) ||
+								   (ann.pieceMoved == PieceType::Bishop && ann.pieceCaptured == PieceType::Knight) ||
+								   (ann.pieceMoved == PieceType::Knight && ann.pieceCaptured == PieceType::Bishop));
 
-  AnnotationWriter::decorate(ann, letter);
+			ann.isTrade = ann.hasCapture && (isRecapture || isEqualMaterialCapture);
+			ann.isRecapture = isRecapture;
+			ann.isQueenTrade =
+				ann.hasCapture && ann.pieceMoved == PieceType::Queen && ann.pieceCaptured == PieceType::Queen;
 
-  // --- game end (from the after FEN; no live board needed) ---
-  ChessLibBoard afterBoard;
-  afterBoard.setFen(job.afterFen);
-  if (afterBoard.isGameOver()) {
-    ann.gameEnded = true;
-    ann.gameState = afterBoard.gameState();
-  }
+			AnnotationWriter::decorate(ann, letter);
 
-  return ann;
-}
-} // namespace AnnotationPipeline
+			// --- game end ---
+			if (job.isGameOver)
+			{
+				ann.gameEnded = true;
+				ann.gameState = job.gameState;
+			}
+			else
+			{
+				ChessLibBoard afterBoard;
+				afterBoard.setFen(job.afterFen);
+				if (afterBoard.isGameOver())
+				{
+					ann.gameEnded = true;
+					ann.gameState = afterBoard.gameState();
+				}
+			}
 
-class AsyncAnnotator {
-public:
-  explicit AsyncAnnotator(std::shared_ptr<IChessAI> ai) : m_ai(std::move(ai)) {}
+			return ann;
+		}
+	} // namespace AnnotationPipeline
 
-  ~AsyncAnnotator() { stop(); }
+	class AsyncAnnotator
+	{
+	public:
+		explicit AsyncAnnotator(std::shared_ptr<IChessAI> ai)
+			: m_ai(std::move(ai))
+		{
+		}
 
-  AsyncAnnotator(const AsyncAnnotator &) = delete;
-  AsyncAnnotator &operator=(const AsyncAnnotator &) = delete;
+		~AsyncAnnotator()
+		{
+			stop();
+		}
 
-  void start() {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_running)
-      return;
-    m_running = true;
-    m_thread = std::thread(&AsyncAnnotator::run, this);
-  }
+		AsyncAnnotator(const AsyncAnnotator&) = delete;
+		AsyncAnnotator& operator=(const AsyncAnnotator&) = delete;
 
-  // Queues a job. Returns false if a job is already in flight or the
-  // worker is stopped.
-  bool submit(AnnotationJob job) {
-    {
-      std::lock_guard<std::mutex> lock(m_mutex);
-      if (!m_running || m_hasJob)
-        return false;
-      m_job = std::move(job);
-      m_hasJob = true;
-      m_hasResult = false;
-    }
-    m_cv.notify_one();
-    return true;
-  }
+		void start()
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			if (m_running)
+				return;
+			m_running = true;
+			m_thread = std::thread(&AsyncAnnotator::run, this);
+		}
 
-  // True while the worker is still processing a job.
-  bool busy() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_hasJob;
-  }
+		// Queues a job. Returns false if a job is already in flight or the
+		// worker is stopped.
+		bool submit(AnnotationJob job)
+		{
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				if (!m_running || m_hasJob)
+					return false;
+				m_job = std::move(job);
+				m_hasJob = true;
+				m_hasResult = false;
+			}
+			m_cv.notify_one();
+			return true;
+		}
 
-  // Returns true once when a finished annotation is available.
-  // Call from the main thread; safe to call every frame.
-  bool poll(MoveAnnotation &out) {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_hasResult)
-      return false;
-    out = m_result;
-    m_hasResult = false;
-    return true;
-  }
+		// True while the worker is still processing a job.
+		bool busy() const
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			return m_hasJob;
+		}
 
-  void stop() {
-    {
-      std::lock_guard<std::mutex> lock(m_mutex);
-      if (!m_running)
-        return;
-      m_running = false;
-      m_hasJob = false;
-    }
-    m_cv.notify_one();
-    if (m_thread.joinable())
-      m_thread.join();
-  }
+		// Returns true once when a finished annotation is available.
+		// Call from the main thread; safe to call every frame.
+		bool poll(MoveAnnotation& out)
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			if (!m_hasResult)
+				return false;
+			out = m_result;
+			m_hasResult = false;
+			return true;
+		}
 
-private:
-  void run() {
-    while (true) {
-      AnnotationJob job;
-      {
-        std::unique_lock<std::mutex> lock(m_mutex);
-        m_cv.wait(lock, [this] { return !m_running || m_hasJob; });
-        if (!m_running && !m_hasJob)
-          break;
-        job = m_job;
-      }
+		void stop()
+		{
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				if (!m_running)
+					return;
+				m_running = false;
+				m_hasJob = false;
+			}
+			m_cv.notify_one();
+			if (m_thread.joinable())
+				m_thread.join();
+		}
 
-      MoveAnnotation result =
-          m_ai ? AnnotationPipeline::build(job, *m_ai) : MoveAnnotation{};
+	private:
+		void run()
+		{
+			while (true)
+			{
+				AnnotationJob job;
+				{
+					std::unique_lock<std::mutex> lock(m_mutex);
+					m_cv.wait(lock, [this] { return !m_running || m_hasJob; });
+					if (!m_running && !m_hasJob)
+						break;
+					job = m_job;
+				}
 
-      {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_hasJob = false;
-        if (m_running) {
-          m_result = std::move(result);
-          m_hasResult = true;
-        }
-      }
-    }
-  }
+				MoveAnnotation result = m_ai ? AnnotationPipeline::build(job, *m_ai) : MoveAnnotation{};
 
-  std::shared_ptr<IChessAI> m_ai;
-  std::thread m_thread;
-  mutable std::mutex m_mutex;
-  std::condition_variable m_cv;
-  bool m_running = false;
+				{
+					std::lock_guard<std::mutex> lock(m_mutex);
+					m_hasJob = false;
+					if (m_running)
+					{
+						m_result = std::move(result);
+						m_hasResult = true;
+					}
+				}
+			}
+		}
 
-  bool m_hasJob = false;
-  AnnotationJob m_job;
+		std::shared_ptr<IChessAI> m_ai;
+		std::thread m_thread;
+		mutable std::mutex m_mutex;
+		std::condition_variable m_cv;
+		bool m_running = false;
 
-  bool m_hasResult = false;
-  MoveAnnotation m_result;
-};
+		bool m_hasJob = false;
+		AnnotationJob m_job;
+
+		bool m_hasResult = false;
+		MoveAnnotation m_result;
+	};
 } // namespace wchess

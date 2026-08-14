@@ -10,32 +10,58 @@
 #include "globals.h"
 #include "systems/moveSystem.h"
 
-namespace wchess {
-namespace AISystem {
-inline void update(Registry &registry, ServiceProvider &services) {
-  ChessState &state = getState(registry);
-  if (!state.board || !state.ai || state.gameOver || state.awaitingPromotion ||
-      state.disableAI)
-    return;
+#include <random>
 
-  if (state.board->sideToMove() ==
-      (state.playerIsWhite ? Color::White : Color::Black))
-    return; // human's turn
+namespace wchess
+{
+	namespace AISystem
+	{
+		inline void update(Registry& registry, ServiceProvider& services)
+		{
+			ChessState& state = getState(registry);
+			if (!state.board || !state.ai || state.gameOver || state.awaitingPromotion || state.disableAI)
+			{
+				state.aiThinking = false;
+				state.aiThinkingTimer = 0.0f;
+				return;
+			}
 
-  if (state.aiThinking)
-    return;
+			if (state.board->sideToMove() == (state.playerIsWhite ? Color::White : Color::Black))
+			{
+				state.aiThinking = false;
+				state.aiThinkingTimer = 0.0f;
+				return; // human's turn
+			}
 
-  // Wait for the annotation of the last move to be published and
-  // for the piece animation to finish before replying.
-  if (state.moveAppliedPendingAnnotation || !state.animatingPieces.empty())
-    return;
+			// Wait for the annotation of the last move to be published and
+			// for the piece animation to finish before starting to think.
+			if (state.moveAppliedPendingAnnotation || !state.animatingPieces.empty())
+				return;
 
-  state.aiThinking = true;
-  state.ai->setPosition(state.board->getFen());
-  Move move = state.ai->bestMove(state.board->legalMoves());
-  state.aiThinking = false;
-  MoveSystem::applyMove(state, registry, services, move,
-                        state.playerIsWhite ? Color::Black : Color::White);
-}
-} // namespace AISystem
+			// Initialize randomized thinking duration (between 1.0s and 3.0s)
+			if (!state.aiThinking)
+			{
+				state.aiThinking = true;
+				state.aiThinkingTimer = 0.0f;
+				static std::mt19937 rng{std::random_device{}()};
+				std::uniform_real_distribution<float> dist(ChessConfig::AI_MIN_THINK_SECONDS,
+														   ChessConfig::AI_MAX_THINK_SECONDS);
+				state.aiThinkingDuration = dist(rng);
+			}
+
+			// Accumulate elapsed frame time
+			float dt = services.time().deltaTime();
+			state.aiThinkingTimer += dt;
+
+			// Wait until the minimum thinking time has elapsed
+			if (state.aiThinkingTimer < state.aiThinkingDuration)
+				return;
+
+			state.ai->setPosition(state.board->getFen());
+			Move move = state.ai->bestMove(state.board->legalMoves());
+			state.aiThinking = false;
+			state.aiThinkingTimer = 0.0f;
+			MoveSystem::applyMove(state, registry, services, move, state.playerIsWhite ? Color::Black : Color::White);
+		}
+	} // namespace AISystem
 } // namespace wchess
