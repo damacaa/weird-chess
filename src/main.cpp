@@ -15,7 +15,7 @@ int main(int argc, char* argv[])
 	displaySettings.internalResolutionScale = 1.0f;
 	displaySettings.enableMaterialBlending = true;
 	displaySettings.uiSmoothFactor = 10.0f;
-	displaySettings.enable2DLigthing = false;
+	displaySettings.enable2DLigthing = true;
 
 	// displaySettings.colorPalette[DisplaySettings::DefaultColors::Black] = vec4(0.22f, 0.22f, 0.27f, 1.0f);
 	// displaySettings.colorPalette[DisplaySettings::DefaultColors::White] = vec4(0.93f, 0.93f, 0.90f, 1.0f);
