@@ -16,22 +16,13 @@ namespace wchess
 {
 	namespace MoveSystem
 	{
-		// Piece footprint is ~62% of a cell (design is s=1.0 fits 0.95).
-		inline constexpr float PIECE_SCALE = ChessConfig::CELL * 0.62f;
-
-		// Rebuilds all piece entities from the board state.
+		// Synchronizes piece positions from the board state without creating or destroying any entities.
 		inline void syncPieces(ChessState& state, Registry& registry, ShapeService& shapes)
 		{
-			for (auto& e : state.pieceEntities)
-			{
-				if (e != INVALID_ENTITY)
-				{
-					registry.destroyEntity(e);
-					e = INVALID_ENTITY;
-				}
-			}
-			registry.freeRemovedComponents();
+			std::vector<bool> used(state.allPieceEntities.size(), false);
+			std::vector<Entity> newBoardPieces(64, INVALID_ENTITY);
 
+			// First pass: keep existing pieces on squares that haven't moved or changed
 			for (int index = 0; index < 64; ++index)
 			{
 				Square square{index & 7, index >> 3};
@@ -39,18 +30,104 @@ namespace wchess
 				if (!piece)
 					continue;
 
-				vec2 c = PieceShapes::squareCenterWorld(index);
-				Entity entity =
-					PieceShapes::spawnPiece(registry, shapes, piece->first, piece->second, c.x, c.y, PIECE_SCALE);
-				auto& pc = registry.addComponent<PieceComp>(entity);
-				pc.color = piece->first;
-				pc.type = piece->second;
-				pc.squareIndex = index;
-				registry.setComponentDirty(pc);
+				Entity existing = state.pieceEntities[index];
+				if (existing != INVALID_ENTITY && registry.hasComponent<PieceComp>(existing))
+				{
+					auto& pc = registry.getComponent<PieceComp>(existing);
+					if (pc.color == piece->first && pc.type == piece->second)
+					{
+						newBoardPieces[index] = existing;
+						for (size_t k = 0; k < state.allPieceEntities.size(); ++k)
+						{
+							if (state.allPieceEntities[k] == existing)
+							{
+								used[k] = true;
+								break;
+							}
+						}
+					}
+				}
+			}
 
-				state.pieceEntities[index] = entity;
+			// Second pass: assign unused matching entities from the pool to new/moved squares
+			for (int index = 0; index < 64; ++index)
+			{
+				if (newBoardPieces[index] != INVALID_ENTITY)
+					continue;
+
+				Square square{index & 7, index >> 3};
+				auto piece = state.board->pieceAt(square);
+				if (!piece)
+					continue;
+
+				Entity chosen = INVALID_ENTITY;
+				for (size_t k = 0; k < state.allPieceEntities.size(); ++k)
+				{
+					if (!used[k])
+					{
+						Entity e = state.allPieceEntities[k];
+						if (registry.hasComponent<PieceComp>(e))
+						{
+							auto& pc = registry.getComponent<PieceComp>(e);
+							if (pc.color == piece->first && pc.type == piece->second)
+							{
+								chosen = e;
+								used[k] = true;
+								break;
+							}
+						}
+					}
+				}
+
+				// If no matching piece is available in the pool (e.g. pawn promotion to extra Queen),
+				// spawn it on-demand at runtime.
+				if (chosen == INVALID_ENTITY)
+				{
+					vec2 c = PieceShapes::squareCenterWorld(index);
+					chosen = PieceShapes::spawnPiece(registry, shapes, piece->first, piece->second, c.x, c.y,
+													 ChessConfig::PIECE_SCALE);
+					auto& pc = registry.addComponent<PieceComp>(chosen);
+					pc.color = piece->first;
+					pc.type = piece->second;
+					pc.squareIndex = index;
+					registry.setComponentDirty(pc);
+					state.allPieceEntities.push_back(chosen);
+					used.push_back(true);
+				}
+				else
+				{
+					auto& pc = registry.getComponent<PieceComp>(chosen);
+					pc.squareIndex = index;
+					registry.setComponentDirty(pc);
+					vec2 c = PieceShapes::squareCenterWorld(index);
+					PieceShapes::setPiecePosition(registry, chosen, c);
+				}
+
+				newBoardPieces[index] = chosen;
+			}
+
+			// Third pass: park any unused pieces (e.g. captured or unpromoted pieces) off-screen
+			for (size_t k = 0; k < state.allPieceEntities.size(); ++k)
+			{
+				if (!used[k])
+				{
+					Entity e = state.allPieceEntities[k];
+					if (registry.hasComponent<PieceComp>(e))
+					{
+						auto& pc = registry.getComponent<PieceComp>(e);
+						pc.squareIndex = -1;
+						registry.setComponentDirty(pc);
+					}
+					PieceShapes::setPiecePosition(registry, e, vec2(-1000.0f, -1000.0f));
+				}
+			}
+
+			state.pieceEntities = std::move(newBoardPieces);
+
+			for (int index = 0; index < 64; ++index)
+			{
 				if (registry.hasComponent<SquareComp>(state.squareEntities[index]))
-					registry.getComponent<SquareComp>(state.squareEntities[index]).piece = entity;
+					registry.getComponent<SquareComp>(state.squareEntities[index]).piece = state.pieceEntities[index];
 			}
 		}
 
@@ -64,6 +141,8 @@ namespace wchess
 
 			vec2 from = PieceShapes::squareCenterWorld(fromIndex);
 			vec2 to = PieceShapes::squareCenterWorld(toIndex);
+
+			PieceShapes::setPiecePosition(registry, piece, from);
 
 			auto& pc = registry.getComponent<PieceComp>(piece);
 			pc.animating = true;
@@ -80,31 +159,34 @@ namespace wchess
 
 		// Clears selection + highlight overlays and repaints them from the
 		// current state (selection, legal targets, last move, check).
+		// Overlays have fixed materials, so no shader recompilation is needed.
 		inline void refreshHighlights(ChessState& state, Registry& registry, ServiceProvider& services)
 		{
-			for (int i = 0; i < 64; ++i)
-				BoardShapes::setHighlight(registry, state.highlightEntities[i], -1, ChessPalette::HighlightCyan);
+			// Selection highlight (green)
+			BoardShapes::setHighlight(registry, state.selectionHighlight, state.selectedSquare);
 
-			if (state.selectedSquare >= 0)
-				BoardShapes::setHighlight(registry, state.highlightEntities[state.selectedSquare], state.selectedSquare,
-										  ChessPalette::HighlightGreen);
-			for (int target : state.legalTargets)
-				BoardShapes::setHighlight(registry, state.highlightEntities[target], target,
-										  ChessPalette::HighlightCyan);
+			// Legal move targets (cyan pool of 28)
+			for (size_t i = 0; i < state.highlightEntities.size(); ++i)
+			{
+				if (i < state.legalTargets.size())
+					BoardShapes::setHighlight(registry, state.highlightEntities[i], state.legalTargets[i]);
+				else
+					BoardShapes::setHighlight(registry, state.highlightEntities[i], -1);
+			}
 
-			// Last move highlight (yellow) on both squares. Painted from
-			// lastMove: it is set synchronously in applyMove, while the
-			// annotation (and its move) only lands later on the worker.
+			// Last move highlight (yellow) on both squares.
 			if (state.hasLastMove)
 			{
 				int fromIdx = state.lastMove.from.index();
 				int toIdx = state.lastMove.to.index();
-				if (fromIdx != state.selectedSquare)
-					BoardShapes::setHighlight(registry, state.highlightEntities[fromIdx], fromIdx,
-											  ChessPalette::HighlightYellow);
-				if (toIdx != state.selectedSquare)
-					BoardShapes::setHighlight(registry, state.highlightEntities[toIdx], toIdx,
-											  ChessPalette::HighlightYellow);
+				BoardShapes::setHighlight(registry, state.lastMoveFromHighlight, fromIdx);
+				BoardShapes::setHighlight(registry, state.lastMoveToHighlight,
+										  (toIdx != state.selectedSquare) ? toIdx : -1);
+			}
+			else
+			{
+				BoardShapes::setHighlight(registry, state.lastMoveFromHighlight, -1);
+				BoardShapes::setHighlight(registry, state.lastMoveToHighlight, -1);
 			}
 
 			// King in check (red).
@@ -112,12 +194,12 @@ namespace wchess
 			{
 				Color kingColor = state.board->sideToMove();
 				int kingIdx = state.board->kingSquare(kingColor).index();
-				BoardShapes::setHighlight(registry, state.highlightEntities[kingIdx], kingIdx, ChessPalette::CheckRed);
+				BoardShapes::setHighlight(registry, state.checkHighlight, kingIdx);
 			}
-
-			// One batch refresh: materials are baked into the generated
-			// shader, so a single regeneration covers all highlight changes.
-			services.render().forceShaderRefresh2D();
+			else
+			{
+				BoardShapes::setHighlight(registry, state.checkHighlight, -1);
+			}
 		}
 
 		// Applies a validated move to the board + scene immediately (the piece

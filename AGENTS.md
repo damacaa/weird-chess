@@ -20,6 +20,8 @@ classification thresholds, NullAI, the Stockfish UCI adapter (handshake,
 evaluate, bestMove, shutdown) and a full AI-vs-AI game through the annotation
 pipeline + narrator thread. No window or ECS required.
 
+- **Do NOT run tests excessively**: `WeirdChessTests` plays a full AI-vs-AI Stockfish game which takes significant time. Use common sense: do not run the test suite after minor edits, UI/shape tweaks, or layout changes. Prefer simply building (`cmake --build build -j`) and only run the test binary when verifying core chess logic or engine integrations.
+
 ## Debug helpers
 
 - `WEIRDCHESS_AUTOPLAY=1 ./build/WeirdChess` - human side plays random legal
@@ -34,8 +36,10 @@ pipeline + narrator thread. No window or ECS required.
   systems (`addStartSystem`, `addUpdateSystem`, ...). Game logic lives in one
   header per system under `systems/`. Do not inline game logic in the scene.
 - The board (`chess::Board` via `ChessLibBoard`) is the single source of
-  truth; ECS piece entities are a visual mirror rebuilt by
-  `MoveSystem::syncPieces` after every move.
+  truth; ECS piece entities are a visual mirror managed by
+  `MoveSystem::syncPieces` (reusing a fixed pre-allocated pool of persistent
+  entities and moving unused/captured pieces off-screen, so no entities are
+  created or destroyed during moves).
 - Move application is split: `MoveSystem::applyMove` applies the move and
   starts the piece animation IMMEDIATELY, then queues the annotation on the
   `AsyncAnnotator` worker thread (chess/AsyncAnnotator.h). The annotation is
@@ -71,15 +75,12 @@ pipeline + narrator thread. No window or ECS required.
   boxes: a filled square's interior SDF dominates any piece standing on it
   (both live in the same SDF group and the renderer keeps the most-negative
   distance), making pieces invisible.
-- Highlight material changes are baked into the generated world shader, so
-  batch them: update all 64 highlights, then call
-  `services.render().forceShaderRefresh2D()` once (see
-  `MoveSystem::refreshHighlights`). A per-highlight refresh recompiles the
-  whole 160-shape shader every call.
-- `applyMove` clears the in-flight animation list BEFORE `syncPieces` (the
-  rebuild destroys every piece entity; a stale animation entry touching a
-  dead entity asserts in the engine's Transform array). The animation system
-  also drops entries whose entity is gone defensively.
+- Highlight shapes use dedicated entities per color (cyan for legal targets,
+  green for selection, yellow for last move, red for check) with fixed
+  materials: their positions are updated via `shape.parameters` so no shader
+  recompilation (`forceShaderRefresh2D`) is ever triggered on highlight changes.
+- `applyMove` clears the in-flight animation list before `syncPieces` to reset
+  any running piece lerps cleanly.
 - `SDL_CreateProcess` stdio streams are NON-BLOCKING: reads must poll with
   `SDL_GetIOStatus == SDL_IO_STATUS_NOT_READY` (see `readLine` in
   `src/chess/StockfishUCIAI.cpp`).

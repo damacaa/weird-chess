@@ -11,7 +11,7 @@ int main(int argc, char* argv[])
 	displaySettings.height = 720;
 	displaySettings.windowTitle = "Weird Chess";
 	displaySettings.vSyncEnabled = true;
-	displaySettings.distanceSampleScale = 0.5f;
+	displaySettings.distanceSampleScale = 0.25f;
 	displaySettings.internalResolutionScale = 1.0f;
 	displaySettings.enableMaterialBlending = true;
 	displaySettings.uiSmoothFactor = 10.0f;

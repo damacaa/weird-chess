@@ -5,6 +5,7 @@
 // coordinates. The board lives in world space; the camera is framed so the
 // board occupies the left half of the window (see systems/layoutSystem.h).
 
+#include "components/ChessState.h"
 #include "components/SquareComp.h"
 #include "config.h"
 #include "globals.h"
@@ -116,14 +117,25 @@ namespace wchess
 		inline constexpr uint16_t LIGHT = ChessPalette::LightSquare;
 		inline constexpr uint16_t DARK = ChessPalette::DarkSquare;
 
-		// Creates the 64 square entities + 64 highlight overlays.
-		inline std::vector<Entity> createBoard(Registry& registry, ShapeService& shapes,
-											   std::vector<Entity>& outHighlights)
+		// Helper to create a single BOX_LINE highlight overlay with a fixed material.
+		inline Entity createHighlightShape(ShapeService& shapes, uint16_t material)
+		{
+			float hw2 = ChessConfig::CELL * 0.46f;
+			float th = ChessConfig::CELL * 0.05f;
+			return shapes.addShape({.shapeId = DefaultShapes::BOX_LINE,
+									.variables = {-1000.0f, -1000.0f, hw2, hw2, th},
+									.material = material,
+									.combination = CombinationType::Addition,
+									.hasCollision = false,
+									.group = 0});
+		}
+
+		// Creates the 64 square entities + pool of legal move overlays (cyan) + dedicated overlays for
+		// selection (green), last move (yellow), and check (red).
+		inline std::vector<Entity> createBoard(Registry& registry, ShapeService& shapes, ChessState& state)
 		{
 			std::vector<Entity> squares;
 			squares.reserve(64);
-			outHighlights.clear();
-			outHighlights.reserve(64);
 
 			for (int index = 0; index < 64; ++index)
 			{
@@ -137,30 +149,44 @@ namespace wchess
 				comp.index = index;
 				registry.setComponentDirty(comp);
 
-				// Highlight overlay (hidden off-screen until used).
-				float hw2 = ChessConfig::CELL * 0.46f;
-				float th = ChessConfig::CELL * 0.05f;
-				Entity highlight = shapes.addShape({.shapeId = DefaultShapes::BOX_LINE,
-													.variables = {-1000.0f, -1000.0f, hw2, hw2, th},
-													.material = ChessPalette::HighlightCyan,
-													.combination = CombinationType::Addition,
-													.hasCollision = false,
-													.group = 0});
-				comp.highlight = highlight;
-				registry.setComponentDirty(registry.getComponent<CustomShape>(highlight));
-
 				squares.push_back(square);
-				outHighlights.push_back(highlight);
 			}
+
+			// Pool of legal target overlays (Cyan, fixed color).
+			// A piece in chess can have at most 27 legal moves (e.g. Queen in center),
+			// so a pool of 28 is sufficient for all possible legal move destinations.
+			state.highlightEntities.clear();
+			state.highlightEntities.reserve(ChessConfig::MAX_TARGET_HIGHLIGHTS);
+			for (int i = 0; i < ChessConfig::MAX_TARGET_HIGHLIGHTS; ++i)
+			{
+				Entity highlight = createHighlightShape(shapes, ChessPalette::HighlightCyan);
+				registry.setComponentDirty(registry.getComponent<CustomShape>(highlight));
+				state.highlightEntities.push_back(highlight);
+			}
+
+			// Dedicated overlays with fixed colors so no shader recompilation is needed
+			state.selectionHighlight = createHighlightShape(shapes, ChessPalette::HighlightGreen);
+			registry.setComponentDirty(registry.getComponent<CustomShape>(state.selectionHighlight));
+
+			state.lastMoveFromHighlight = createHighlightShape(shapes, ChessPalette::HighlightYellow);
+			registry.setComponentDirty(registry.getComponent<CustomShape>(state.lastMoveFromHighlight));
+
+			state.lastMoveToHighlight = createHighlightShape(shapes, ChessPalette::HighlightYellow);
+			registry.setComponentDirty(registry.getComponent<CustomShape>(state.lastMoveToHighlight));
+
+			state.checkHighlight = createHighlightShape(shapes, ChessPalette::CheckRed);
+			registry.setComponentDirty(registry.getComponent<CustomShape>(state.checkHighlight));
+
 			return squares;
 		}
 
 		// Sets a highlight overlay visible at a square (or hides it when
-		// index < 0). Does NOT force a shader refresh - callers batch that
-		// once after updating a set of highlights (material changes are baked
-		// into the generated shader, so one refresh covers all of them).
-		inline void setHighlight(Registry& registry, Entity highlight, int squareIndex, uint16_t material)
+		// squareIndex < 0). Only updates parameters (position), never the material,
+		// so no shader recompilation is triggered.
+		inline void setHighlight(Registry& registry, Entity highlight, int squareIndex)
 		{
+			if (highlight == INVALID_ENTITY)
+				return;
 			auto& shape = registry.getComponent<CustomShape>(highlight);
 			if (squareIndex < 0)
 			{
@@ -173,7 +199,6 @@ namespace wchess
 				shape.parameters[0] = c.x;
 				shape.parameters[1] = c.y;
 			}
-			shape.material = material;
 			registry.setComponentDirty(shape);
 		}
 	} // namespace BoardShapes

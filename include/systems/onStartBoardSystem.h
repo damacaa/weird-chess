@@ -78,9 +78,6 @@ namespace wchess
 		// ---- background + text sizes ----
 		auto& bg = services.render().getBackground();
 		bg.type = BackgroundType::Custom;
-		DisplaySettings defaultDisplay;
-		bg.primaryColor = defaultDisplay.colorPalette[DisplaySettings::DefaultColors::White];  // Light squares
-		bg.secondaryColor = defaultDisplay.colorPalette[DisplaySettings::DefaultColors::Gray]; // Dark squares
 		bg.customShaderCode = R"(
 			vec3 getBackground(vec2 uv, vec2 worldPos)
 			{
@@ -159,8 +156,9 @@ namespace wchess
 		PieceShapes::registerAll(services.shapes());
 		BoardShapes::registerAll(services.shapes());
 
-		// ---- board ----
-		state.squareEntities = BoardShapes::createBoard(registry, services.shapes(), state.highlightEntities);
+		// ---- pieces pool & board ----
+		PieceShapes::initPiecePool(registry, services.shapes(), state.allPieceEntities, ChessConfig::PIECE_SCALE);
+		state.squareEntities = BoardShapes::createBoard(registry, services.shapes(), state);
 		state.pieceEntities.assign(64, INVALID_ENTITY);
 		MoveSystem::syncPieces(state, registry, services.shapes());
 

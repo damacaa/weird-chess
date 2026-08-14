@@ -17,6 +17,8 @@ namespace ChessConfig
 	inline constexpr int BOARD_FILES = 8;
 	inline constexpr int BOARD_RANKS = 8;
 	inline constexpr float BOARD_WORLD = CELL * 8.0f; // 120.0
+	inline constexpr float PIECE_SCALE = CELL * 0.62f;
+	inline constexpr int MAX_TARGET_HIGHLIGHTS = 28; // max legal moves for any piece (Queen max is 27)
 
 	// Board positioning inside the window: the board's right edge is kept a
 	// few pixels left of the screen centre so the story panel has its own

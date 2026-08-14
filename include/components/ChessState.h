@@ -44,11 +44,16 @@ namespace wchess
 		std::shared_ptr<NarratorThread> narrator;
 
 		// ---- board entities ----
-		std::vector<Entity> squareEntities;	   // [64]
-		std::vector<Entity> highlightEntities; // [64]
-		std::vector<Entity> pieceEntities;	   // [64] (per square; INVALID_ENTITY if empty)
-		std::vector<Entity> rankLabels;		   // [8] world-space "1".."8"
-		std::vector<Entity> fileLabels;		   // [8] world-space "a".."h"
+		std::vector<Entity> squareEntities;			   // [64]
+		std::vector<Entity> highlightEntities;		   // [MAX_TARGET_HIGHLIGHTS = 28] legal targets (cyan)
+		Entity selectionHighlight = INVALID_ENTITY;	   // selection (green)
+		Entity lastMoveFromHighlight = INVALID_ENTITY; // last move from (yellow)
+		Entity lastMoveToHighlight = INVALID_ENTITY;   // last move to (yellow)
+		Entity checkHighlight = INVALID_ENTITY;		   // king in check (red)
+		std::vector<Entity> allPieceEntities;		   // [32+] pool of piece entities (32 initial, promo on-demand)
+		std::vector<Entity> pieceEntities;			   // [64] per square; INVALID_ENTITY if empty
+		std::vector<Entity> rankLabels;				   // [8] world-space "1".."8"
+		std::vector<Entity> fileLabels;				   // [8] world-space "a".."h"
 
 		// ---- selection / interaction ----
 		int selectedSquare = -1;
