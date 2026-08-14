@@ -75,6 +75,7 @@ namespace wchess
 		std::vector<vec2> animFrom;
 		std::vector<vec2> animTo;
 		std::vector<float> animT;
+		std::vector<Entity> capturedPiecesPendingRemoval; // captured pieces hidden at end of move animation
 
 		// ---- annotations ----
 		MoveAnnotation lastAnnotation;

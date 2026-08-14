@@ -36,7 +36,7 @@ namespace ChessConfig
 	inline constexpr int STORY_MAX_LINES = 28;
 
 	// ---- Animation ----
-	inline constexpr float MOVE_ANIM_SECONDS = 0.18f;
+	inline constexpr float MOVE_ANIM_SECONDS = .75f;
 
 	// ---- AI / engine ----
 	// Path candidates for the Stockfish binary (checked in order, first hit

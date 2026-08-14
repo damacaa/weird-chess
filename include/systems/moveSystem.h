@@ -106,7 +106,8 @@ namespace wchess
 				newBoardPieces[index] = chosen;
 			}
 
-			// Third pass: park any unused pieces (e.g. captured or unpromoted pieces) off-screen
+			// Third pass: park any unused pieces (e.g. captured or unpromoted pieces) off-screen,
+			// EXCEPT pieces pending capture removal (they will be hidden once the attacking animation lands).
 			for (size_t k = 0; k < state.allPieceEntities.size(); ++k)
 			{
 				if (!used[k])
@@ -118,7 +119,21 @@ namespace wchess
 						pc.squareIndex = -1;
 						registry.setComponentDirty(pc);
 					}
-					PieceShapes::setPiecePosition(registry, e, vec2(-1000.0f, -1000.0f));
+
+					bool isPendingCapture = false;
+					for (Entity pending : state.capturedPiecesPendingRemoval)
+					{
+						if (pending == e)
+						{
+							isPendingCapture = true;
+							break;
+						}
+					}
+
+					if (!isPendingCapture)
+					{
+						PieceShapes::setPiecePosition(registry, e, vec2(-1000.0f, -1000.0f));
+					}
 				}
 			}
 
@@ -210,27 +225,57 @@ namespace wchess
 		inline void applyMove(ChessState& state, Registry& registry, ServiceProvider& services, const Move& move,
 							  Color mover)
 		{
-			// Any in-flight animation references pieces that syncPieces is
-			// about to destroy: drop the animation state first (the pieces
-			// snap to their squares, then the new animation starts).
+			// Clean up any previously pending captured pieces immediately
+			for (Entity captured : state.capturedPiecesPendingRemoval)
+			{
+				if (captured != INVALID_ENTITY)
+					PieceShapes::destroyPiece(registry, captured);
+			}
+			state.capturedPiecesPendingRemoval.clear();
+
 			state.animatingPieces.clear();
 			state.animFrom.clear();
 			state.animTo.clear();
 			state.animT.clear();
 
+			int fromIdx = move.from.index();
+			int toIdx = move.to.index();
+
+			// Detect if a piece is being captured BEFORE making the board move
+			Entity capturedEntity = INVALID_ENTITY;
+			if (move.isEnPassant)
+			{
+				int epSquare = move.from.rank * 8 + move.to.file;
+				if (epSquare >= 0 && epSquare < 64)
+					capturedEntity = state.pieceEntities[epSquare];
+			}
+			else
+			{
+				Entity targetPiece = state.pieceEntities[toIdx];
+				if (targetPiece != INVALID_ENTITY && targetPiece != state.pieceEntities[fromIdx])
+				{
+					capturedEntity = targetPiece;
+				}
+			}
+
+			if (capturedEntity != INVALID_ENTITY)
+			{
+				state.capturedPiecesPendingRemoval.push_back(capturedEntity);
+			}
+
 			int legalBefore = static_cast<int>(state.board->legalMoves().size());
 			std::string beforeFen = state.board->getFen();
 			if (!state.board->makeMove(move))
+			{
+				state.capturedPiecesPendingRemoval.clear();
 				return;
+			}
 			std::string afterFen = state.board->getFen();
 
 			auto lastApplied = state.board->lastMove();
 			Move fullMove = lastApplied.value_or(move);
 
-			int fromIdx = fullMove.from.index();
-			int toIdx = fullMove.to.index();
-
-			// Visuals first: rebuild the mirror and start the animation.
+			// Visuals first: update piece pool mirror and start the animation.
 			syncPieces(state, registry, services.shapes());
 			animatePiece(state, registry, fromIdx, toIdx);
 
@@ -299,6 +344,13 @@ namespace wchess
 			state.animFrom.clear();
 			state.animTo.clear();
 			state.animT.clear();
+
+			for (Entity captured : state.capturedPiecesPendingRemoval)
+			{
+				if (captured != INVALID_ENTITY)
+					PieceShapes::destroyPiece(registry, captured);
+			}
+			state.capturedPiecesPendingRemoval.clear();
 
 			if (state.narrator)
 			{

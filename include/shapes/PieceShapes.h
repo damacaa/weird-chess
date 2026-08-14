@@ -233,6 +233,23 @@ namespace wchess
 			}
 		}
 
+		// Moves a piece entity to a world position with scale (used by animations).
+		inline void setPiecePositionAndScale(Registry& registry, Entity entity, const vec2& worldPos, float scale)
+		{
+			auto& t = registry.getComponent<Transform>(entity);
+			t.position = vec3(worldPos, 0.0f);
+			registry.setComponentDirty(t);
+
+			if (registry.hasComponent<CustomShape>(entity))
+			{
+				auto& shape = registry.getComponent<CustomShape>(entity);
+				shape.parameters[0] = worldPos.x;
+				shape.parameters[1] = worldPos.y;
+				shape.parameters[2] = scale;
+				registry.setComponentDirty(shape);
+			}
+		}
+
 		// Parks a piece entity off-screen (used for captures / promotions instead of destroying).
 		inline void destroyPiece(Registry& registry, Entity piece)
 		{
