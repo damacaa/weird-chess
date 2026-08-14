@@ -51,8 +51,8 @@ An experimental chess game built on **[weird-engine](https://github.com/damacaa/
 - **2D SDF Ray-Marched Graphics:** Board squares, pieces, highlights, and buttons are defined as Signed Distance Fields and ray-marched with crisp vector-like edges and procedural materials.
 - **Asynchronous Move Classification:** Fast centipawn loss and tactical analysis without stalling the animation or render loop.
 - **Tactic Detection Engine:** Real-time bitboard analysis detecting forks, absolute & relative pins, skewers, discovered attacks, checks, and mates.
-- **Humanized AI Opponent:** Stockfish UCI integration configured for casual human play (shallow search depth, dynamic blunders, Elo limits), with a toggle for tournament master strength.
-- **Offline / Graceful Fallback AI:** Runs out-of-the-box even without Stockfish installed via a built-in `NullAI` (random legal moves + material evaluation).
+- **Built-in In-Process Engine (`MinimaxAI`):** High-performance C++20 Alpha-Beta search with PeSTO tapered piece-square evaluation and Quiescence search. Runs 100% in-process out of the box and compiles directly to WebAssembly for web builds (e.g. itch.io).
+- **Optional Stockfish UCI Support:** Subprocess adapter for Stockfish with humanized Elo tuning (shallow search depth, dynamic blunders, Elo limits) and tournament master strength toggle.
 - **Responsive Layout System:** Dynamic resolution tracking and auto-reframing for arbitrary window sizes.
 - **Modular ECS Architecture:** Thin scene dispatcher registering decoupled, single-responsibility systems.
 
@@ -94,8 +94,9 @@ Weird Chess is built around clean boundaries and an Entity-Component-System (ECS
    Encapsulates move generation, legality validation, FEN parsing, check/mate/draw rules, and move history.
 2. **AI & Analysis (`IChessAI`)**  
    Defines the contract for bot moves and position evaluations (`evaluate`, `bestMove`, `setStrength`, `setPosition`).
-   - `StockfishUCIAI`: Communicates with a Stockfish binary over standard UCI via non-blocking pipes (`SDL_CreateProcess`).
-   - `NullAI`: Fallback AI for standalone testing without external dependencies.
+   - `MinimaxAI`: High-performance in-process Alpha-Beta engine with PeSTO piece-square evaluation and quiescence search (default for web and offline native builds; 100% MIT).
+   - `StockfishUCIAI`: Communicates with a local Stockfish binary over standard UCI via non-blocking pipes (`SDL_CreateProcess`).
+   - `NullAI`: Minimal fallback for testing without search logic.
 3. **Narrator Pipeline (`INarrator` & `NarratorThread`)**  
    Worker thread receiving completed `MoveAnnotation`s and streaming generated story lines into a thread-safe `StoryStream`.
 
@@ -111,9 +112,10 @@ The project is designed to be lightweight, modular, and easy to build:
 | **[SDL3](https://github.com/libsdl-org/SDL)** | Engine dependency | Built via weird-engine | zlib | Window creation, input handling, non-blocking subprocess I/O |
 | **[Dear ImGui](https://github.com/ocornut/imgui)** | Engine dependency | Built via weird-engine | MIT | Debug overlay (FEN, turn counter, engine status, last eval) |
 | **[chess-library](https://github.com/Disservin/chess-library)** | `third_party/chess/` | Vendored header (`chess.hpp`) | MIT | High-performance C++20 bitboard chess move generation and rules |
-| **[Stockfish](https://stockfishchess.org/)** *(optional)* | External binary | Subprocess execution via UCI pipes | GPLv3 | Opponent move calculation and tactical evaluation |
+| **`MinimaxAI`** | `include/chess/MinimaxAI.h` | Built-in in-process C++20 engine | MIT | Default out-of-the-box engine, runs natively on WebAssembly / Desktop |
+| **[Stockfish](https://stockfishchess.org/)** *(optional)* | External binary | Subprocess execution via UCI pipes | GPLv3 | Optional high-tier engine for deep desktop analysis |
 
-> **Note on Licensing:** Stockfish is **not** linked into the WeirdChess binary. It runs as an independent external subprocess via standard UCI pipes, ensuring the WeirdChess codebase remains under the permissive MIT license.
+> **Note on Licensing:** `MinimaxAI` is 100% MIT. Stockfish is **not** linked into the WeirdChess binary; it runs as an independent external subprocess via standard UCI pipes, ensuring the WeirdChess codebase remains under the permissive MIT license.
 
 ---
 
@@ -241,8 +243,8 @@ While the game includes a built-in `NullAI` fallback, Stockfish provides full-st
 | **Select Piece / Move** | Left Mouse Click |
 | **Deselect Piece** | `Escape` or Right Mouse Click |
 | **Pawn Promotion** | Press `Q` (Queen), `R` (Rook), `B` (Bishop), or `N` (Knight) / Keys `1`-`4` |
-| **New Game** | Click **NEW GAME** button on the bottom left |
-| **Toggle AI Strength** | Click **STRONG AI** button to toggle between casual and tournament master strength |
+| **New Game** | Click the square button on the bottom right panel to reset the board |
+| **Manual Opponent Override** | Click the circle toggle on the bottom right panel to take manual control of both sides |
 
 ---
 

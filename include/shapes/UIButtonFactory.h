@@ -34,12 +34,12 @@ namespace wchess
 		inline Entity createShape(Registry& registry, ShapeService& shapes, ShapeId id,
 								  const std::array<float, 8>& vars, uint16_t material)
 		{
-			return shapes.addUIShape({.shapeId = id,
-									  .variables = {vars[0], vars[1], vars[2], vars[3], vars[4], vars[5], vars[6],
-													vars[7]},
-									  .material = material,
-									  .combination = CombinationType::Addition,
-									  .group = 0});
+			return shapes.addUIShape(
+				{.shapeId = id,
+				 .variables = {vars[0], vars[1], vars[2], vars[3], vars[4], vars[5], vars[6], vars[7]},
+				 .material = material,
+				 .combination = CombinationType::Addition,
+				 .group = 0});
 		}
 
 		// A clickable button: box outline with hover highlight. Returns the
@@ -47,14 +47,17 @@ namespace wchess
 		inline Entity createButton(Registry& registry, ShapeService& shapes, float x, float y, float w, float h,
 								   uint16_t material)
 		{
-			Entity e = shapes.addUIShape({.shapeId = DefaultShapes::BOX_LINE,
-										  .variables = {x, y, w * 0.5f, h * 0.5f, 1.5f},
+			Entity e = shapes.addUIShape({.shapeId = DefaultShapes::BOX,
+										  .variables = {x, y, w * 0.5f, h * 0.5f},
 										  .material = material,
 										  .combination = CombinationType::Addition,
 										  .group = 0});
 
 			auto& button = registry.addComponent<ShapeButton>(e);
 			button.clickPadding = 14.0f;
+			button.parameterModifierMask.set(2);
+			button.parameterModifierMask.set(3);
+			button.modifierAmount = 2.0f;
 			return e;
 		}
 
@@ -63,7 +66,7 @@ namespace wchess
 								   uint16_t material)
 		{
 			Entity e = shapes.addUIShape({.shapeId = DefaultShapes::CIRCLE_LINE,
-										  .variables = {x, y, r, 1.5f},
+										  .variables = {x, y, r, 4.0f},
 										  .material = material,
 										  .combination = CombinationType::Addition,
 										  .group = 0});
@@ -71,7 +74,7 @@ namespace wchess
 			auto& toggle = registry.addComponent<ShapeToggle>(e);
 			toggle.clickPadding = 14.0f;
 			toggle.parameterModifierMask.set(3); // thickness grows while active
-			toggle.modifierAmount = 2.0f;
+			toggle.modifierAmount = 4.0f;
 			return e;
 		}
 	} // namespace UIButtonFactory

@@ -17,12 +17,11 @@ int main(int argc, char* argv[])
 	displaySettings.uiSmoothFactor = 10.0f;
 	displaySettings.enable2DLigthing = false;
 
-
-	displaySettings.colorPalette[DisplaySettings::DefaultColors::Black] = vec4(0.22f, 0.22f, 0.27f, 1.0f);
-	displaySettings.colorPalette[DisplaySettings::DefaultColors::White] = vec4(0.93f, 0.93f, 0.90f, 1.0f);
-	displaySettings.colorPalette[DisplaySettings::DefaultColors::Gray] = vec4(0.52f, 0.52f, 0.58f, 1.0f);
-	displaySettings.colorPalette[DisplaySettings::DefaultColors::LightGray] = vec4(0.84f, 0.78f, 0.66f, 1.0f);
-	displaySettings.colorPalette[DisplaySettings::DefaultColors::Brown] = vec4(0.50f, 0.37f, 0.24f, 1.0f);
+	// displaySettings.colorPalette[DisplaySettings::DefaultColors::Black] = vec4(0.22f, 0.22f, 0.27f, 1.0f);
+	// displaySettings.colorPalette[DisplaySettings::DefaultColors::White] = vec4(0.93f, 0.93f, 0.90f, 1.0f);
+	// displaySettings.colorPalette[DisplaySettings::DefaultColors::Gray] = vec4(0.52f, 0.52f, 0.58f, 1.0f);
+	// displaySettings.colorPalette[DisplaySettings::DefaultColors::LightGray] = vec4(0.84f, 0.78f, 0.66f, 1.0f);
+	// displaySettings.colorPalette[DisplaySettings::DefaultColors::Brown] = vec4(0.50f, 0.37f, 0.24f, 1.0f);
 
 	PhysicsSettings physicsSettings{};
 	physicsSettings.gravity = 0.0f;

@@ -31,10 +31,10 @@ extern vec3 g_cameraPositon;
 // palette is tuned for chess).
 namespace ChessPalette
 {
-	inline constexpr uint16_t BlackPiece = DisplaySettings::DefaultColors::Black;	  // repurposed: dark piece color
+	inline constexpr uint16_t BlackPiece = DisplaySettings::DefaultColors::Black; // repurposed: dark piece color
 	inline constexpr uint16_t WhitePiece = DisplaySettings::DefaultColors::White;
 	inline constexpr uint16_t LightSquare = DisplaySettings::DefaultColors::LightGray; // repurposed: tan light square
-	inline constexpr uint16_t DarkSquare = DisplaySettings::DefaultColors::Brown;	  // repurposed: wood dark square
+	inline constexpr uint16_t DarkSquare = DisplaySettings::DefaultColors::Brown;	   // repurposed: wood dark square
 	inline constexpr uint16_t HighlightCyan = DisplaySettings::DefaultColors::Cyan;
 	inline constexpr uint16_t HighlightYellow = DisplaySettings::DefaultColors::Yellow;
 	inline constexpr uint16_t HighlightGreen = DisplaySettings::DefaultColors::Green;
@@ -43,4 +43,7 @@ namespace ChessPalette
 	inline constexpr uint16_t PanelTextDim = DisplaySettings::DefaultColors::Gray;
 	inline constexpr uint16_t PanelTitle = DisplaySettings::DefaultColors::Orange;
 	inline constexpr uint16_t PanelAccent = DisplaySettings::DefaultColors::Magenta;
+	inline constexpr uint16_t ButtonBox = DisplaySettings::DefaultColors::Gray;
+	inline constexpr uint16_t ButtonText = DisplaySettings::DefaultColors::White;
+	inline constexpr uint16_t ToggleCircle = DisplaySettings::DefaultColors::Cyan;
 } // namespace ChessPalette
