@@ -19,13 +19,77 @@ namespace wchess
 			return t < 0.5f ? 4.0f * t * t * t : 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) / 2.0f;
 		}
 
+		// Computes the dramatic intensity / closeness to game end in [0.0, 1.0]
+		inline float computeGameIntensity(const ChessState& state)
+		{
+			if (!state.board)
+				return 0.0f;
+
+			if (state.gameOver || state.board->isGameOver())
+			{
+				if (state.board->gameState() == GameState::Checkmate)
+					return 1.0f;
+				return 0.15f; // Draw/stalemate settles down
+			}
+
+			// 1. Position decisiveness / evaluation advantage (decisive positions drive high tension)
+			float evalIntensity = 0.0f;
+			if (state.hasLastAnnotation)
+			{
+				if (state.lastAnnotation.tactics.checkmate)
+				{
+					evalIntensity = 1.0f;
+				}
+				else
+				{
+					float cpScore = static_cast<float>(std::abs(state.lastAnnotation.evalAfterCp));
+					float cpNorm = std::clamp(cpScore / 700.0f, 0.0f, 1.0f);
+					// 99% win chance -> winDev = 0.98 -> evalIntensity reaches 0.98
+					float winDev = std::clamp(std::abs(state.lastAnnotation.winChanceAfter - 0.5f) * 2.0f, 0.0f, 1.0f);
+					evalIntensity = std::max(cpNorm, winDev);
+				}
+			}
+
+			// 2. Endgame progression (moves + material traded)
+			int fullMoves = state.board->fullMoveNumber();
+			float moveProgress = std::clamp(static_cast<float>(fullMoves - 1) / 35.0f, 0.0f, 1.0f);
+
+			int pieceCount = 0;
+			for (int r = 0; r < 8; ++r)
+			{
+				for (int f = 0; f < 8; ++f)
+				{
+					if (state.board->pieceAt(Square{f, r}).has_value())
+						++pieceCount;
+				}
+			}
+			float materialProgress = std::clamp((32.0f - static_cast<float>(pieceCount)) / 26.0f, 0.0f, 1.0f);
+			float gameProgress = 0.5f * (moveProgress + materialProgress);
+
+			// 3. Immediate pressure: King in check (+0.25 bonus)
+			float checkBonus = state.board->inCheck() ? 0.25f : 0.0f;
+
+			// Decisive positions (e.g. 99% win chance, mate in 1) or checks directly drive high intensity
+			float target = std::max(evalIntensity * 0.90f, gameProgress * 0.65f) + checkBonus;
+			return std::clamp(target, 0.0f, 1.0f);
+		}
+
 		inline void update(Registry& registry, ServiceProvider& services)
 		{
 			ChessState& state = getState(registry);
+			float dt = services.time().deltaTime();
+
+			// ---- 1. Match background intensity smoothing ----
+			state.targetIntensity = computeGameIntensity(state);
+			// Smooth, responsive transition without sudden phase jerks
+			float lerpRate = 1.6f;
+			state.currentIntensity =
+				glm::mix(state.currentIntensity, state.targetIntensity, std::clamp(dt * lerpRate, 0.0f, 1.0f));
+			services.render().getBackground().intensity = state.currentIntensity;
+
+			// ---- 2. Piece move animations ----
 			if (state.animatingPieces.empty())
 				return;
-
-			float dt = services.time().deltaTime();
 
 			for (size_t i = 0; i < state.animatingPieces.size(); ++i)
 			{

@@ -78,6 +78,7 @@ namespace wchess
 		// ---- background + text sizes ----
 		auto& bg = services.render().getBackground();
 		bg.type = BackgroundType::Custom;
+		bg.intensity = 0.0f; // dynamically driven each frame by AnimationSystem::computeGameIntensity
 		bg.customShaderCode = R"(
 			vec3 getBackground(vec2 uv, vec2 worldPos)
 			{
@@ -120,27 +121,39 @@ namespace wchess
 
 				vec3 tableColor = mix(darkBase, deepPlum, smoothstep(0.1, 0.6, subtleBands));
 				tableColor = mix(tableColor, oceanTeal, smoothstep(0.35, 0.85, sin(p.y * 1.6 + t * 0.25) * 0.5 + 0.5));
-				tableColor = mix(tableColor, glowAccent, smoothstep(0.72, 1.0, subtleBands) * 0.40);
-				tableColor += bandEdge * 0.012;
+				tableColor = mix(tableColor, glowAccent, smoothstep(0.72, 1.0, subtleBands) * (0.40 + u_bgIntensity * 0.35));
+				tableColor += bandEdge * (0.012 + u_bgIntensity * 0.015);
 
-				float bx = trueWorldPos.x;
-				float by = trueWorldPos.y;
+				// Simple horizontal left-to-right wave repeating ~10 times across board height:
+				float waveSpeed = 2.8;
+				float waveFreq = (10.0 * 6.2831853) / BOARD_SIZE; // exactly ~10 wave cycles over the board height
+				float waveAmp = u_bgIntensity * 0.8; // horizontal displacement
 
-				// Outside the 8x8 board: Balatro table background
-				if (bx < 0.0 || bx > BOARD_SIZE || by < 0.0 || by > BOARD_SIZE)
-				{
-					return tableColor;
-				}
+				float wave = sin(u_time * waveSpeed + trueWorldPos.y * waveFreq);
+				vec2 wiggledPos = vec2(trueWorldPos.x + wave * waveAmp, trueWorldPos.y);
 
-				// Inside 8x8 Board Tiles:
-				vec2 boardCoord = trueWorldPos / CELL;
-				ivec2 cell = ivec2(floor(boardCoord));
-				bool isLight = ((cell.x + cell.y) & 1) == 1;
+				// Antialiased outer board border with rounded corners (rounded box SDF)
+				float cornerRadius = 2.0; // 2px corner radius
+				vec2 boxCenter = vec2(BOARD_SIZE * 0.5);
+				vec2 boxHalf = vec2(BOARD_SIZE * 0.5);
+				vec2 q = abs(wiggledPos - boxCenter) - boxHalf + cornerRadius;
+				float boardDist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - cornerRadius;
+				float borderFw = max(length(fwidth(wiggledPos)) * 0.7071, 0.001);
+				float borderAlpha = smoothstep(0.5 * borderFw, -0.5 * borderFw, boardDist);
 
-				// Completely flat solid tiles:
+				// Analytic antialiased checkerboard calculation
+				vec2 gridPos = wiggledPos / CELL;
+				vec2 gridFw = max(fwidth(gridPos), vec2(0.0001));
+				vec2 gridStep = 2.0 * (abs(fract((gridPos - 0.5) * 0.5) - 0.5) - 0.25);
+				gridStep = clamp(gridStep / gridFw, -1.0, 1.0);
+				float checker = clamp(0.5 - 0.5 * gridStep.x * gridStep.y, 0.0, 1.0);
+
 				vec3 lightColor = u_bgPrimaryColor.rgb;
 				vec3 darkColor  = u_bgSecondaryColor.rgb;
-				return (isLight ? lightColor : darkColor) * u_bgIntensity;
+				vec3 boardColor = mix(darkColor, lightColor, checker);
+
+				// Antialiased composite between Balatro table background and the chessboard
+				return mix(tableColor, boardColor, borderAlpha);
 			}
 			)";
 

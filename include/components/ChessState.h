@@ -100,6 +100,8 @@ namespace wchess
 		std::deque<std::string> storyText;					  // visible story lines (front = top)
 		std::vector<std::string> rawStoryChunks;			  // full history of raw story paragraphs
 		int lastWrapChars = 0;								  // last computed wrap width in characters
+		float currentIntensity = 0.0f;						  // smoothly interpolated intensity in [0.0, 1.0]
+		float targetIntensity = 0.0f;						  // target intensity driving background shader
 		Entity newGameButton = INVALID_ENTITY;
 		Entity disableAIToggle = INVALID_ENTITY;
 		Entity storyTitle = INVALID_ENTITY;

@@ -366,6 +366,9 @@ namespace wchess
 			}
 			state.rawStoryChunks.clear();
 			state.storyText.clear();
+			state.currentIntensity = 0.0f;
+			state.targetIntensity = 0.0f;
+			services.render().getBackground().intensity = 0.0f;
 			state.layoutDirty = true;
 
 			syncPieces(state, registry, services.shapes());

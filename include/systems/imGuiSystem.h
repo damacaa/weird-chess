@@ -28,6 +28,7 @@ namespace wchess
 						state.lastAnnotation.quality == MoveQuality::Blunder ? "BLUNDER" : "move",
 						state.lastAnnotation.san.c_str(), static_cast<float>(state.lastAnnotation.lossCp) / 100.0f);
 		}
+		ImGui::Text("Intensity: %.2f (target: %.2f)", state.currentIntensity, state.targetIntensity);
 		ImGui::Text("Game over: %s", state.gameOver ? "yes" : "no");
 	}
 } // namespace wchess
