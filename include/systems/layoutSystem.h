@@ -98,9 +98,9 @@ namespace wchess
 			}
 
 			const float storyTop = panelTop - 1.5f * pitch;
-			const float storyBottomMargin = 24.0f;
-			const int visible =
-				std::clamp(static_cast<int>((storyTop - storyBottomMargin) / pitch), 1, ChessConfig::STORY_MAX_LINES);
+			const float storyBottomMargin = 64.0f;
+			const int visible = std::clamp(static_cast<int>((storyTop - storyBottomMargin) / pitch), 1,
+										   static_cast<int>(state.storyLines.size()));
 			state.storyVisibleLines = visible;
 			for (size_t i = 0; i < state.storyLines.size(); ++i)
 			{
@@ -138,6 +138,7 @@ namespace wchess
 				registry.setComponentDirty(t);
 			}
 
+			state.layoutDirty = true;
 			services.render().forceShaderRefresh2D();
 			services.render().forceShaderRefreshUI();
 		}
@@ -146,7 +147,7 @@ namespace wchess
 		{
 			ChessState& state = getState(registry);
 
-			int hash = Display::width + Display::height;
+			int hash = (Display::width << 16) ^ Display::height;
 			if (state.lastResolutionHash != hash)
 			{
 				state.lastResolutionHash = hash;

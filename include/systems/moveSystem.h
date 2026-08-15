@@ -364,6 +364,9 @@ namespace wchess
 			{
 				state.narrator->stream()->clear();
 			}
+			state.rawStoryChunks.clear();
+			state.storyText.clear();
+			state.layoutDirty = true;
 
 			syncPieces(state, registry, services.shapes());
 			refreshHighlights(state, registry, services);

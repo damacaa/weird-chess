@@ -98,6 +98,8 @@ namespace wchess
 		std::vector<Entity> storyLines;						  // one UITextRenderer per line
 		int storyVisibleLines = ChessConfig::STORY_MAX_LINES; // set by layoutSystem
 		std::deque<std::string> storyText;					  // visible story lines (front = top)
+		std::vector<std::string> rawStoryChunks;			  // full history of raw story paragraphs
+		int lastWrapChars = 0;								  // last computed wrap width in characters
 		Entity newGameButton = INVALID_ENTITY;
 		Entity disableAIToggle = INVALID_ENTITY;
 		Entity storyTitle = INVALID_ENTITY;

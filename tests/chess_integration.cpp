@@ -15,6 +15,7 @@
 #include "config.h"
 #include "globals.h"
 #include "systems/annotationSystem.h"
+#include "systems/narrativeRenderSystem.h"
 
 #include <cstdio>
 
@@ -516,6 +517,37 @@ static void testMoveClassificationAndTrades()
 	printf("classification and trade checks passed\n");
 }
 
+static void testTextWrapping()
+{
+	printf("---- testing text wrapping ----\n");
+
+	// 1. 14 character wrapping (width 1280 resolution panel width)
+	std::string text1 = "White (1) - Good e4 (+0.20)";
+	auto lines1 = NarrativeRenderSystem::wrapLines(text1, 14);
+	for (const auto& l : lines1)
+	{
+		CHECK(static_cast<int>(l.size()) <= 14);
+	}
+	CHECK(lines1.size() == 3);
+	CHECK(lines1[0] == "White (1) -");
+	CHECK(lines1[1] == "Good e4");
+	CHECK(lines1[2] == "(+0.20)");
+
+	// 2. 30 character wrapping (width 2560 resolution panel width)
+	auto lines2 = NarrativeRenderSystem::wrapLines(text1, 30);
+	CHECK(lines2.size() == 1);
+	CHECK(lines2[0] == text1);
+
+	// 3. Long word without spaces
+	std::string longWord = "Supercalifragilistic";
+	auto lines3 = NarrativeRenderSystem::wrapLines(longWord, 10);
+	CHECK(lines3.size() == 2);
+	CHECK(lines3[0] == "Supercalif");
+	CHECK(lines3[1] == "ragilistic");
+
+	printf("text wrapping checks passed\n");
+}
+
 int main(int argc, char** argv)
 {
 	testMinimaxAI();
@@ -524,6 +556,7 @@ int main(int argc, char** argv)
 	testPromotion();
 	testTacticDetection();
 	testMoveClassificationAndTrades();
+	testTextWrapping();
 
 	ChessState state;
 	state.board = std::make_shared<ChessLibBoard>();

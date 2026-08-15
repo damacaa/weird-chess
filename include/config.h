@@ -33,7 +33,7 @@ namespace ChessConfig
 	inline constexpr float PANEL_LEFT_MARGIN_PX = 40.0f; // story text starts this far right of the centre
 	inline constexpr float PANEL_RIGHT_MARGIN_PX = 24.0f;
 	inline constexpr float PANEL_TOP_MARGIN_PX = 56.0f;
-	inline constexpr int STORY_MAX_LINES = 28;
+	inline constexpr int STORY_MAX_LINES = 64;
 
 	// ---- Animation ----
 	// Constant average movement speed (world units per second).

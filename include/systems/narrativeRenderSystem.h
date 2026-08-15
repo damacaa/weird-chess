@@ -9,8 +9,10 @@
 #include "config.h"
 #include "globals.h"
 
+#include <algorithm>
 #include <deque>
 #include <string>
+#include <vector>
 
 namespace wchess
 {
@@ -48,7 +50,7 @@ namespace wchess
 					}
 					out.push_back(line.substr(start, end - start));
 					start = end;
-					if (start < line.size() && line[start] == ' ')
+					while (start < line.size() && line[start] == ' ')
 						++start;
 				}
 			};
@@ -68,41 +70,88 @@ namespace wchess
 			return out;
 		}
 
+		// Helper to compute max characters that fit within the story panel width
+		inline int calculateWrapChars(ServiceProvider& services)
+		{
+			auto& uiCtx = services.render().getContextUI();
+			const float width = static_cast<float>(Display::width);
+			const float halfW = width * 0.5f;
+			const float panelLeft = halfW + ChessConfig::PANEL_LEFT_MARGIN_PX;
+			const float panelRightMargin = ChessConfig::PANEL_RIGHT_MARGIN_PX;
+			const float availableWidth = width - panelLeft - panelRightMargin;
+
+			const float glyphWidth = static_cast<float>(uiCtx.font.getCharWidth()) * 2.0f * uiCtx.dotRadious;
+			const float charAdvance = glyphWidth + uiCtx.charSpacing;
+
+			if (charAdvance > 0.0f && availableWidth > 0.0f)
+			{
+				return std::max(6, static_cast<int>((availableWidth + uiCtx.charSpacing) / charAdvance));
+			}
+			return 20;
+		}
+
 		inline void update(Registry& registry, ServiceProvider& services)
 		{
 			ChessState& state = getState(registry);
 			if (state.storyLines.empty())
 				return;
 
-			const int wrapChars = 20; // rough; layout keeps lines inside the panel
+			const int wrapChars = calculateWrapChars(services);
 
+			bool newChunks = false;
 			// Drain anything the narrator produced this frame.
 			if (state.narrator)
 			{
 				auto chunks = state.narrator->stream()->drain();
-				for (auto& chunk : chunks)
+				if (!chunks.empty())
 				{
-					for (auto& line : wrapLines(chunk, wrapChars))
+					newChunks = true;
+					for (auto& chunk : chunks)
 					{
-						state.storyText.push_back(line);
+						state.rawStoryChunks.push_back(chunk);
+					}
+				}
+			}
+
+			if (newChunks || wrapChars != state.lastWrapChars || state.layoutDirty)
+			{
+				state.lastWrapChars = wrapChars;
+				state.layoutDirty = false;
+
+				std::vector<std::string> allLines;
+				for (const auto& chunk : state.rawStoryChunks)
+				{
+					auto lines = wrapLines(chunk, wrapChars);
+					for (auto& line : lines)
+					{
+						allLines.push_back(line);
 					}
 				}
 
-				// Keep only as many lines as we can display.
-				while (static_cast<int>(state.storyText.size()) > state.storyVisibleLines)
-					state.storyText.pop_front();
-			}
+				// Keep only the visible window of lines (tail)
+				size_t startLineIdx = allLines.size() > static_cast<size_t>(state.storyVisibleLines)
+										  ? allLines.size() - static_cast<size_t>(state.storyVisibleLines)
+										  : 0;
 
-			// Push the visible lines into the text entities.
-			size_t i = 0;
-			for (; i < state.storyLines.size(); ++i)
-			{
-				auto& text = registry.getComponent<UITextRenderer>(state.storyLines[i]);
-				std::string content = i < state.storyText.size() ? state.storyText[i] : "";
-				if (text.text != content)
+				state.storyText.clear();
+				for (size_t i = 0; i < state.storyLines.size(); ++i)
 				{
-					text.text = content;
-					registry.setComponentDirty(text);
+					size_t lineIdx = startLineIdx + i;
+					std::string content =
+						(i < static_cast<size_t>(state.storyVisibleLines) && lineIdx < allLines.size())
+							? allLines[lineIdx]
+							: "";
+					if (i < static_cast<size_t>(state.storyVisibleLines) && lineIdx < allLines.size())
+					{
+						state.storyText.push_back(content);
+					}
+
+					auto& text = registry.getComponent<UITextRenderer>(state.storyLines[i]);
+					if (text.text != content)
+					{
+						text.text = content;
+						registry.setComponentDirty(text);
+					}
 				}
 			}
 
