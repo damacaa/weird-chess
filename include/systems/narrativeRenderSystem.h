@@ -90,6 +90,36 @@ namespace wchess
 			return 20;
 		}
 
+		// Formats raw story chunks into display lines wrapped at wrapChars,
+		// inserting extra spacing (empty line) between distinct messages.
+		inline std::vector<std::string> formatStoryLines(const std::vector<std::string>& chunks, int wrapChars)
+		{
+			std::vector<std::string> allLines;
+			for (const auto& chunk : chunks)
+			{
+				if (chunk.empty())
+					continue;
+
+				auto lines = wrapLines(chunk, wrapChars);
+				if (lines.empty())
+					continue;
+
+				// Add extra line spacing between distinct messages
+				if (!allLines.empty() && !allLines.back().empty() && !lines.front().empty())
+				{
+					allLines.push_back("");
+				}
+
+				for (auto& line : lines)
+				{
+					if (line.empty() && !allLines.empty() && allLines.back().empty())
+						continue;
+					allLines.push_back(line);
+				}
+			}
+			return allLines;
+		}
+
 		inline void update(Registry& registry, ServiceProvider& services)
 		{
 			ChessState& state = getState(registry);
@@ -118,15 +148,7 @@ namespace wchess
 				state.lastWrapChars = wrapChars;
 				state.layoutDirty = false;
 
-				std::vector<std::string> allLines;
-				for (const auto& chunk : state.rawStoryChunks)
-				{
-					auto lines = wrapLines(chunk, wrapChars);
-					for (auto& line : lines)
-					{
-						allLines.push_back(line);
-					}
-				}
+				std::vector<std::string> allLines = formatStoryLines(state.rawStoryChunks, wrapChars);
 
 				// Keep only the visible window of lines (tail)
 				size_t startLineIdx = allLines.size() > static_cast<size_t>(state.storyVisibleLines)

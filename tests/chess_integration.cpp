@@ -14,6 +14,7 @@
 #include "components/ChessState.h"
 #include "config.h"
 #include "globals.h"
+#include "systems/animationSystem.h"
 #include "systems/annotationSystem.h"
 #include "systems/narrativeRenderSystem.h"
 
@@ -545,7 +546,59 @@ static void testTextWrapping()
 	CHECK(lines3[0] == "Supercalif");
 	CHECK(lines3[1] == "ragilistic");
 
+	// 4. Message spacing: wrapped lines of the same message stay adjacent,
+	// while different messages have an extra blank line between them.
+	std::vector<std::string> chunks = {"White (1) - Good e4 (+0.20)", "Black (1) - Best e5 (0.00)"};
+	auto storyLines = NarrativeRenderSystem::formatStoryLines(chunks, 14);
+	// Message 1 wraps into 3 lines, then 1 blank line separator, then Message 2 wraps into 3 lines
+	CHECK(storyLines.size() == 7);
+	CHECK(storyLines[0] == "White (1) -");
+	CHECK(storyLines[1] == "Good e4");
+	CHECK(storyLines[2] == "(+0.20)");
+	CHECK(storyLines[3] == "");
+	CHECK(storyLines[4] == "Black (1) -");
+	CHECK(storyLines[5] == "Best e5");
+	CHECK(storyLines[6] == "(0.00)");
+
 	printf("text wrapping checks passed\n");
+}
+
+static void testGameIntensity()
+{
+	printf("---- testing game intensity calculation ----\n");
+
+	// 1. Starting position: calm, intensity near 0.0
+	{
+		ChessState state;
+		state.board = std::make_shared<ChessLibBoard>();
+		state.board->loadStartPosition();
+		float intensity = AnimationSystem::computeGameIntensity(state);
+		CHECK(intensity >= 0.0f && intensity <= 0.05f);
+	}
+
+	// 2. Position with King in Check: should have significant check bonus
+	{
+		ChessState state;
+		state.board = std::make_shared<ChessLibBoard>();
+		// Black king on e8 in check from White Queen on e7
+		state.board->setFen("4k3/4Q3/8/8/8/8/8/4K3 b - - 0 1");
+		float intensity = AnimationSystem::computeGameIntensity(state);
+		CHECK(intensity >= 0.25f);
+	}
+
+	// 3. Checkmate position: maximum intensity 1.0
+	{
+		ChessState state;
+		state.board = std::make_shared<ChessLibBoard>();
+		// Fool's mate: Black checkmated
+		state.board->setFen("rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3");
+		CHECK(state.board->isGameOver());
+		CHECK(state.board->gameState() == GameState::Checkmate);
+		float intensity = AnimationSystem::computeGameIntensity(state);
+		CHECK(intensity == 1.0f);
+	}
+
+	printf("game intensity checks passed\n");
 }
 
 int main(int argc, char** argv)
@@ -557,6 +610,7 @@ int main(int argc, char** argv)
 	testTacticDetection();
 	testMoveClassificationAndTrades();
 	testTextWrapping();
+	testGameIntensity();
 
 	ChessState state;
 	state.board = std::make_shared<ChessLibBoard>();
