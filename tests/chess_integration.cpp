@@ -391,12 +391,139 @@ static void testPromotion()
 	printf("promotion unit checks passed\n");
 }
 
+static void testTacticDetection()
+{
+	printf("---- testing tactic detection ----\n");
+	ChessLibBoard board;
+
+	// 1. Move 8 False Skewer check (Qg4+ vs King on d7, blocked/defended)
+	board.setFen("r1bq1b1r/pp1kpppp/2n2n2/3pP1B1/2P5/N7/PP3PPP/R2QKBNR w - - 1 8");
+	auto qCheck = ChessLibBoard::fromUci("d1g4");
+	CHECK(qCheck.has_value());
+	if (qCheck)
+	{
+		TacticInfo t = TacticDetector::analyze(board, *qCheck);
+		CHECK(t.check);
+		CHECK(!t.skewer); // Must NOT be flagged as a skewer
+	}
+
+	// 2. Move 12 cxd5 (Pawn takes Knight)
+	board.setFen("r1b1k2r/pp2bppp/1qp1p3/3n4/2P5/N7/PP1B1PPP/R3KBNR w - - 0 12");
+	auto cxd5 = ChessLibBoard::fromUci("c4d5");
+	CHECK(cxd5.has_value());
+	if (cxd5)
+	{
+		TacticInfo t = TacticDetector::analyze(board, *cxd5);
+		CHECK(!t.hangsPiece); // Winning capture must NOT be flagged as hanging piece
+	}
+
+	// 3. True Skewer (Queen on h8 checks King on c8 with Rook on a8 behind)
+	board.setFen("r1k5/8/8/8/8/8/8/4K2Q w - - 0 1");
+	auto qh8 = ChessLibBoard::fromUci("h1h8");
+	CHECK(qh8.has_value());
+	if (qh8)
+	{
+		TacticInfo t = TacticDetector::analyze(board, *qh8);
+		CHECK(t.check);
+		CHECK(t.skewer); // True skewer along 8th rank
+	}
+
+	printf("tactic detection checks passed\n");
+}
+
+static void testMoveClassificationAndTrades()
+{
+	printf("---- testing classification and trade detection ----\n");
+	NullAI nullAi;
+
+	// 1. Bishop takes free Knight (Bxa3): NOT a trade, but a free material capture
+	{
+		AnnotationJob job;
+		job.beforeFen = "r1b1k2r/3pbppp/1qp1p3/p2P4/8/N1P5/1P1B1PPP/R2QKB1R b - - 0 15";
+		auto bxa3 = ChessLibBoard::fromUci("f8a3");
+		CHECK(bxa3.has_value());
+		job.move = *bxa3;
+		job.mover = Color::Black;
+		job.hasPrevMove = false;
+		job.legalMoveCount = 30;
+		job.fullMoveNumber = 15;
+
+		ChessLibBoard testBoard;
+		testBoard.setFen(job.beforeFen);
+		testBoard.makeMove(job.move);
+		job.afterFen = testBoard.getFen();
+
+		MoveAnnotation ann = AnnotationPipeline::build(job, nullAi);
+		CHECK(ann.hasCapture);
+		CHECK(!ann.isTrade); // Free capture is NOT a trade
+		CHECK(ann.tradeEvent.find("Routine piece trade") == std::string::npos);
+		CHECK(ann.tradeEvent.find("MATERIAL:") != std::string::npos);
+	}
+
+	// 2. King Walk on move 4 (Kd7) with significant win chance drop: classified as Mistake/Blunder, NOT Inaccuracy
+	{
+		ClassificationInput in;
+		in.evalBeforeCp = 60;
+		in.evalAfterCp = -220; // loss of 280 cp
+		in.bestMoveCp = 60;
+		in.winChanceBefore = 0.66f;
+		in.winChanceAfter = 0.44f;
+		in.winChanceDelta = -0.22f;
+		in.pieceMoved = PieceType::King;
+		in.legalMoveCount = 25;
+		in.openingPly = 4;
+		MoveQuality q = classify(in);
+		CHECK(q == MoveQuality::Mistake || q == MoveQuality::Blunder);
+		CHECK(q != MoveQuality::Inaccuracy);
+	}
+
+	// 3. Decided position capture (Bxa6 when up +15.0): classified as Best/Great, NOT Miss
+	{
+		ClassificationInput in;
+		in.evalBeforeCp = 1800;
+		in.evalAfterCp = 1600; // 200cp loss due to mate depth variation, but still +16.0
+		in.bestMoveCp = 1800;
+		in.winChanceBefore = 1.0f;
+		in.winChanceAfter = 1.0f;
+		in.winChanceDelta = 0.0f;
+		in.tactics.capture = true;
+		in.move.isCapture = true;
+		in.pieceMoved = PieceType::Bishop;
+		in.legalMoveCount = 20;
+		MoveQuality q = classify(in);
+		CHECK(q == MoveQuality::Great || q == MoveQuality::Best || q == MoveQuality::Good);
+		CHECK(q != MoveQuality::Miss);
+		CHECK(q != MoveQuality::Blunder);
+	}
+
+	// 4. Mate-in-1: classified as Best/Great with CHECKMATE, NOT Brilliant
+	{
+		ClassificationInput in;
+		in.evalBeforeCp = 800;
+		in.evalAfterCp = 20000;
+		in.bestMoveCp = 20000;
+		in.winChanceBefore = 0.99f;
+		in.winChanceAfter = 1.0f;
+		in.tactics.checkmate = true;
+		in.tactics.check = true;
+		in.pieceMoved = PieceType::Queen;
+		in.legalMoveCount = 15;
+		MoveQuality q = classify(in);
+		CHECK(q != MoveQuality::Brilliant);
+		CHECK(q == MoveQuality::Best || q == MoveQuality::Great);
+	}
+
+	printf("classification and trade checks passed\n");
+}
+
 int main(int argc, char** argv)
 {
 	testMinimaxAI();
 	testCastling();
 	testEnPassant();
 	testPromotion();
+	testTacticDetection();
+	testMoveClassificationAndTrades();
 
 	ChessState state;
 	state.board = std::make_shared<ChessLibBoard>();

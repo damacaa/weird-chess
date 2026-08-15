@@ -23,5 +23,6 @@ namespace wchess
 		vec2 fromPos{0.0f, 0.0f};
 		vec2 toPos{0.0f, 0.0f};
 		float animT = 0.0f;
+		float animDuration = 0.0f;
 	};
 } // namespace wchess

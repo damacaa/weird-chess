@@ -26,7 +26,6 @@ namespace wchess
 				return;
 
 			float dt = services.time().deltaTime();
-			const float duration = ChessConfig::MOVE_ANIM_SECONDS;
 
 			for (size_t i = 0; i < state.animatingPieces.size(); ++i)
 			{
@@ -36,6 +35,10 @@ namespace wchess
 					state.animT[i] = 1.0f; // mark finished so the compaction drops it
 					continue;
 				}
+
+				float duration = state.animDuration[i];
+				if (duration <= 0.0f)
+					duration = ChessConfig::MOVE_ANIM_MIN_SECONDS;
 
 				float t = std::min(1.0f, state.animT[i] + dt / duration);
 				state.animT[i] = t;
@@ -83,12 +86,14 @@ namespace wchess
 				state.animFrom[alive] = state.animFrom[i];
 				state.animTo[alive] = state.animTo[i];
 				state.animT[alive] = state.animT[i];
+				state.animDuration[alive] = state.animDuration[i];
 				++alive;
 			}
 			state.animatingPieces.resize(alive);
 			state.animFrom.resize(alive);
 			state.animTo.resize(alive);
 			state.animT.resize(alive);
+			state.animDuration.resize(alive);
 
 			// When all piece animations finish, hide any captured pieces that were waiting to be removed
 			if (state.animatingPieces.empty() && !state.capturedPiecesPendingRemoval.empty())

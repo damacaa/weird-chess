@@ -38,6 +38,19 @@ namespace wchess
 						return Bitboard(0);
 				}
 			}
+
+			// Returns all pieces of the given color attacking sq.
+			inline chess::Bitboard attackersOf(const chess::Board& board, chess::Square sq, chess::Color color)
+			{
+				using namespace chess;
+				return (attacks::pawn(~color, sq) & board.pieces(chess::PieceType::PAWN, color)) |
+					   (attacks::knight(sq) & board.pieces(chess::PieceType::KNIGHT, color)) |
+					   (attacks::king(sq) & board.pieces(chess::PieceType::KING, color)) |
+					   (attacks::bishop(sq, board.occ()) & (board.pieces(chess::PieceType::BISHOP, color) |
+															board.pieces(chess::PieceType::QUEEN, color))) |
+					   (attacks::rook(sq, board.occ()) &
+						(board.pieces(chess::PieceType::ROOK, color) | board.pieces(chess::PieceType::QUEEN, color)));
+			}
 		} // namespace detail
 
 		// Analyzes `move` played in position `before`. The board is copied and
@@ -46,7 +59,11 @@ namespace wchess
 		{
 			TacticInfo info;
 
-			info.capture = move.isCapture;
+			auto piece = before.pieceAt(move.from);
+			auto targetPiece = before.pieceAt(move.to);
+			bool isCap = move.isCapture || move.isEnPassant || targetPiece.has_value();
+
+			info.capture = isCap;
 			info.enPassant = move.isEnPassant;
 			info.castling = move.isCastling;
 			info.promotion = move.isPromotion;
@@ -67,9 +84,11 @@ namespace wchess
 			info.check = after.inCheck();
 			if (info.check)
 			{
+				chess::Square ksq = raw.kingSq(enemyCh);
+				chess::Bitboard checkers = detail::attackersOf(raw, ksq, moverCh);
+				info.doubleCheck = checkers.count() >= 2;
 				CheckType ct = before.raw().givesCheck(ChessLibBoard::toInternal(move));
-				info.discoveredCheck = ct == CheckType::DISCOVERY_CHECK;
-				info.doubleCheck = info.discoveredCheck && info.check;
+				info.discoveredCheck = (ct == CheckType::DISCOVERY_CHECK) || info.doubleCheck;
 			}
 			if (after.isGameOver())
 			{
@@ -93,111 +112,202 @@ namespace wchess
 				info.backRank = true;
 
 			// --- fork ---
-			if (!move.isPromotion && !move.isCastling)
+			if (!move.isPromotion && !move.isCastling && piece && piece->second != PieceType::King)
 			{
-				auto piece = before.pieceAt(move.from);
-				if (piece && piece->second != PieceType::Pawn && piece->second != PieceType::King)
+				chess::Square sq = chess::Square(move.to.file + move.to.rank * 8);
+				chess::PieceType pt;
+				switch (piece->second)
 				{
-					chess::Square sq(chess::File(move.to.file), chess::Rank(move.to.rank));
-					chess::PieceType pt;
-					switch (piece->second)
+					case PieceType::Pawn:
+						pt = chess::PieceType::PAWN;
+						break;
+					case PieceType::Knight:
+						pt = chess::PieceType::KNIGHT;
+						break;
+					case PieceType::Bishop:
+						pt = chess::PieceType::BISHOP;
+						break;
+					case PieceType::Rook:
+						pt = chess::PieceType::ROOK;
+						break;
+					default:
+						pt = chess::PieceType::QUEEN;
+						break;
+				}
+				chess::Bitboard attacked = detail::attacksOf(raw, pt, sq, raw.occ()) & raw.us(enemyCh);
+				int targets = 0;
+				int moverVal = pieceValue(piece->second);
+				while (attacked)
+				{
+					chess::Square s(attacked.pop());
+					Piece p = raw.at(s);
+					if (p.type() == chess::PieceType::KING)
 					{
-						case PieceType::Knight:
-							pt = chess::PieceType::KNIGHT;
-							break;
-						case PieceType::Bishop:
-							pt = chess::PieceType::BISHOP;
-							break;
-						case PieceType::Rook:
-							pt = chess::PieceType::ROOK;
-							break;
-						default:
-							pt = chess::PieceType::QUEEN;
-							break;
+						++targets;
 					}
-					chess::Bitboard attacked = detail::attacksOf(raw, pt, sq, raw.occ()) & raw.us(enemyCh);
-					int targets = 0;
-					while (attacked)
+					else
 					{
-						chess::Square s(attacked.pop());
-						Piece p = raw.at(s);
-						// Count only real targets: non-pawns (or the king).
-						if (p.type() == chess::PieceType::KING || p.type() == chess::PieceType::KNIGHT ||
-							p.type() == chess::PieceType::BISHOP || p.type() == chess::PieceType::ROOK || p.type() == chess::PieceType::QUEEN)
+						int targetVal = 100;
+						switch (p.type().internal())
+						{
+							case chess::PieceType::KNIGHT:
+							case chess::PieceType::BISHOP:
+								targetVal = 300;
+								break;
+							case chess::PieceType::ROOK:
+								targetVal = 500;
+								break;
+							case chess::PieceType::QUEEN:
+								targetVal = 900;
+								break;
+							default:
+								targetVal = 100;
+								break;
+						}
+						bool undefended = !raw.isAttacked(s, enemyCh);
+						if (targetVal >= moverVal || undefended || targetVal >= 300)
 						{
 							++targets;
 						}
 					}
-					info.forkTargets = targets;
-					info.fork = targets >= 2;
 				}
+				info.forkTargets = targets;
+				info.fork = targets >= 2;
 			}
 
-			// --- pin / skewer: the moved piece sits on a ray from the enemy king ---
+			// --- pin / skewer: rays emanating from the moved piece ---
+			if (piece && !move.isCastling)
 			{
-				auto piece = before.pieceAt(move.from);
-				if (piece && !move.isCastling)
+				bool isSliderDiag = piece->second == PieceType::Bishop || piece->second == PieceType::Queen;
+				bool isSliderOrtho = piece->second == PieceType::Rook || piece->second == PieceType::Queen;
+				if (isSliderDiag || isSliderOrtho)
 				{
-					bool isSliderDiag = piece->second == PieceType::Bishop || piece->second == PieceType::Queen;
-					bool isSliderOrtho = piece->second == PieceType::Rook || piece->second == PieceType::Queen;
-					if (isSliderDiag || isSliderOrtho)
+					chess::Square moverSq = chess::Square(move.to.file + move.to.rank * 8);
+					const int dirs[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+					for (auto& d : dirs)
 					{
-						chess::Square ksq(chess::File(enemyKing.file), chess::Rank(enemyKing.rank));
-						chess::Square targetSq(chess::File(move.to.file), chess::Rank(move.to.rank));
-						const int dirs[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
-						for (auto& d : dirs)
+						bool diag = d[0] != 0 && d[1] != 0;
+						bool ortho = d[0] == 0 || d[1] == 0;
+						if (diag ? !isSliderDiag : !isSliderOrtho)
+							continue;
+
+						// Scan ray from moverSq along direction (d[0], d[1])
+						int f = static_cast<int>(moverSq.file()) + d[0];
+						int r = static_cast<int>(moverSq.rank()) + d[1];
+
+						chess::Square firstSq{};
+						while (f >= 0 && f < 8 && r >= 0 && r < 8)
 						{
-							bool diag = d[0] != 0 && d[1] != 0;
-							bool ortho = d[0] == 0 || d[1] == 0;
-							if (diag ? !isSliderDiag : !isSliderOrtho)
-								continue;
-
-							// First and second occupied squares along the ray (any color).
-							auto piecesOnRay = [&](int df, int dr) {
-								std::vector<chess::Square> out;
-								int f = static_cast<int>(ksq.file()) + df;
-								int r = static_cast<int>(ksq.rank()) + dr;
-								while (f >= 0 && f < 8 && r >= 0 && r < 8)
-								{
-									chess::Square s = chess::Square(chess::File(f), chess::Rank(r));
-									if (raw.at(s) != chess::Piece::NONE)
-										out.push_back(s);
-									f += df;
-									r += dr;
-								}
-								return out;
-							};
-
-							auto forward = piecesOnRay(d[0], d[1]);
-							auto backward = piecesOnRay(-d[0], -d[1]);
-
-							if (!forward.empty() && forward[0] == targetSq)
+							chess::Square s = chess::Square(f + r * 8);
+							if (raw.at(s) != chess::Piece::NONE)
 							{
-								// The mover is the closest piece to the king: if something
-								// valuable stands behind the king -> skewer.
-								if (!backward.empty())
-									info.skewer = true;
+								firstSq = s;
+								break;
 							}
-							else if (forward.size() >= 2 && forward[1] == targetSq)
+							f += d[0];
+							r += d[1];
+						}
+
+						if (firstSq == chess::Square::underlying::NO_SQ || raw.at(firstSq).color() != enemyCh)
+							continue;
+
+						f = static_cast<int>(firstSq.file()) + d[0];
+						r = static_cast<int>(firstSq.rank()) + d[1];
+						chess::Square secondSq{};
+						while (f >= 0 && f < 8 && r >= 0 && r < 8)
+						{
+							chess::Square s = chess::Square(f + r * 8);
+							if (raw.at(s) != chess::Piece::NONE)
 							{
-								// Exactly one piece (the king's own) between king and mover: pin.
+								secondSq = s;
+								break;
+							}
+							f += d[0];
+							r += d[1];
+						}
+
+						if (secondSq == chess::Square::underlying::NO_SQ || raw.at(secondSq).color() != enemyCh)
+							continue;
+
+						chess::Piece firstPiece = raw.at(firstSq);
+						chess::Piece secondPiece = raw.at(secondSq);
+
+						// PIN: firstPiece is an enemy piece in front of enemy King or Queen
+						if (firstPiece.type() != chess::PieceType::KING)
+						{
+							if (secondPiece.type() == chess::PieceType::KING ||
+								(secondPiece.type() == chess::PieceType::QUEEN &&
+								 firstPiece.type() != chess::PieceType::QUEEN))
+							{
 								info.pin = true;
 							}
+						}
+
+						// SKEWER: firstPiece is enemy King (delivering check) or Queen, exposing a valuable target
+						// behind it
+						if (firstPiece.type() == chess::PieceType::KING && info.check)
+						{
+							bool targetBehindIsValuable =
+								(secondPiece.type() == chess::PieceType::QUEEN ||
+								 secondPiece.type() == chess::PieceType::ROOK || !raw.isAttacked(secondSq, enemyCh));
+							if (targetBehindIsValuable)
+								info.skewer = true;
+						}
+						else if (firstPiece.type() == chess::PieceType::QUEEN)
+						{
+							bool targetBehindIsValuable =
+								(secondPiece.type() == chess::PieceType::ROOK ||
+								 secondPiece.type() == chess::PieceType::BISHOP ||
+								 secondPiece.type() == chess::PieceType::KNIGHT || !raw.isAttacked(secondSq, enemyCh));
+							if (targetBehindIsValuable)
+								info.skewer = true;
 						}
 					}
 				}
 			}
 
-			// --- hangs piece: mover now attacked by the enemy and undefended ---
+			// --- hangs piece: moved piece stands attacked and undefended / lost ---
 			{
-				chess::Square to(chess::File(move.to.file), chess::Rank(move.to.rank));
-				info.hangsPiece = raw.isAttacked(to, enemyCh) && !raw.isAttacked(to, moverCh);
+				chess::Square to = chess::Square(move.to.file + move.to.rank * 8);
+				bool enemyAttacks = raw.isAttacked(to, enemyCh);
+				bool moverDefends = raw.isAttacked(to, moverCh);
+
+				if (enemyAttacks && !after.inCheck())
+				{
+					int moverVal = piece ? pieceValue(piece->second) : 100;
+					int capturedVal = 0;
+					if (isCap)
+					{
+						if (move.isEnPassant)
+						{
+							capturedVal = 100;
+						}
+						else if (targetPiece)
+						{
+							capturedVal = pieceValue(targetPiece->second);
+						}
+						else
+						{
+							capturedVal = 100;
+						}
+					}
+
+					// Only hanging if this was not an equal or winning capture
+					if (!isCap || moverVal > capturedVal)
+					{
+						if (!moverDefends)
+						{
+							info.hangsPiece = true;
+						}
+					}
+				}
 			}
 
 			// --- discovered attack: a friendly slider attacks something new ---
 			{
 				chess::Bitboard friendlySliders =
-					raw.pieces(chess::PieceType::BISHOP, chess::PieceType::ROOK, chess::PieceType::QUEEN) & raw.us(moverCh);
+					raw.pieces(chess::PieceType::BISHOP, chess::PieceType::ROOK, chess::PieceType::QUEEN) &
+					raw.us(moverCh);
 				chess::Bitboard enemyPieces = raw.us(enemyCh);
 				chess::Bitboard occNoMover = raw.occ();
 				occNoMover.clear(chess::Square(chess::File(move.from.file), chess::Rank(move.from.rank)).index());

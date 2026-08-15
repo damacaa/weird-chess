@@ -147,7 +147,7 @@ namespace wchess
 		}
 
 		// Starts an eased animation for the piece moving from one square to
-		// another (usually the just-moved piece).
+		// another (usually the just-moved piece) with duration proportional to distance.
 		inline void animatePiece(ChessState& state, Registry& registry, int fromIndex, int toIndex)
 		{
 			Entity piece = state.pieceEntities[toIndex];
@@ -157,6 +157,9 @@ namespace wchess
 			vec2 from = PieceShapes::squareCenterWorld(fromIndex);
 			vec2 to = PieceShapes::squareCenterWorld(toIndex);
 
+			float dist = glm::length(to - from);
+			float duration = std::max(ChessConfig::MOVE_ANIM_MIN_SECONDS, dist / ChessConfig::MOVE_ANIM_SPEED);
+
 			PieceShapes::setPiecePosition(registry, piece, from);
 
 			auto& pc = registry.getComponent<PieceComp>(piece);
@@ -164,12 +167,14 @@ namespace wchess
 			pc.fromPos = from;
 			pc.toPos = to;
 			pc.animT = 0.0f;
+			pc.animDuration = duration;
 			registry.setComponentDirty(pc);
 
 			state.animatingPieces.push_back(piece);
 			state.animFrom.push_back(from);
 			state.animTo.push_back(to);
 			state.animT.push_back(0.0f);
+			state.animDuration.push_back(duration);
 		}
 
 		// Clears selection + highlight overlays and repaints them from the
@@ -237,6 +242,7 @@ namespace wchess
 			state.animFrom.clear();
 			state.animTo.clear();
 			state.animT.clear();
+			state.animDuration.clear();
 
 			int fromIdx = move.from.index();
 			int toIdx = move.to.index();
@@ -265,6 +271,7 @@ namespace wchess
 
 			int legalBefore = static_cast<int>(state.board->legalMoves().size());
 			std::string beforeFen = state.board->getFen();
+			int fullMoveBefore = state.board->fullMoveNumber();
 			if (!state.board->makeMove(move))
 			{
 				state.capturedPiecesPendingRemoval.clear();
@@ -315,7 +322,7 @@ namespace wchess
 				job.prevEvalValid = state.hasLastAnnotation;
 				job.prevEval = state.lastAnnotation.evalAfterCp;
 				job.legalMoveCount = legalBefore;
-				job.fullMoveNumber = state.board->fullMoveNumber();
+				job.fullMoveNumber = fullMoveBefore;
 				job.isGameOver = state.board->isGameOver();
 				job.gameState = state.board->gameState();
 				if (state.annotator->submit(job))
@@ -344,6 +351,7 @@ namespace wchess
 			state.animFrom.clear();
 			state.animTo.clear();
 			state.animT.clear();
+			state.animDuration.clear();
 
 			for (Entity captured : state.capturedPiecesPendingRemoval)
 			{

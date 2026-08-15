@@ -7,6 +7,8 @@
 #include "chess/ChessTypes.h"
 #include "config.h"
 
+#include <algorithm>
+#include <cmath>
 #include <vector>
 
 namespace wchess
@@ -14,13 +16,18 @@ namespace wchess
 	struct ClassificationInput
 	{
 		// Evaluations in centipawns, all from the *mover's* perspective.
-		int evalBeforeCp = 0;  // the position before the move
-		int evalAfterCp = 0;   // the position after the move
-		int bestMoveCp = 0;	// evaluation of the best move in the before position
-		int bestReplyCp = 0;   // evaluation after the best reply (used for sacrifices)
+		int evalBeforeCp = 0; // the position before the move
+		int evalAfterCp = 0;  // the position after the move
+		int bestMoveCp = 0;	  // evaluation of the best move in the before position
+		int bestReplyCp = 0;  // evaluation after the best reply (used for sacrifices)
+
+		float winChanceBefore = 0.5f;
+		float winChanceAfter = 0.5f;
+		float winChanceDelta = 0.0f;
 
 		TacticInfo tactics;
 		Move move;
+		PieceType pieceMoved = PieceType::Pawn;
 		int legalMoveCount = 0; // total legal moves in the before position
 		int openingPly = 0;		// full-move number, for "book" heuristics
 	};
@@ -29,53 +36,72 @@ namespace wchess
 	{
 		const TacticInfo& t = in.tactics;
 
-		// Game-ending moves are always noteworthy.
-		if (t.checkmate)
-			return MoveQuality::Brilliant;
-
 		const bool onlyLegal = in.legalMoveCount <= 1;
+		if (onlyLegal)
+			return MoveQuality::Forced;
 
 		// How much better the best move was than what was played.
-		int lossCp = in.bestMoveCp - in.evalAfterCp;
+		int lossCp = std::max(0, in.bestMoveCp - in.evalAfterCp);
 		// How much the move improved over the starting position.
 		int gainCp = in.evalAfterCp - in.evalBeforeCp;
 
 		const float lossPawns = static_cast<float>(lossCp) / 100.0f;
 		const float gainPawns = static_cast<float>(gainCp) / 100.0f;
+		const float winLoss = -in.winChanceDelta; // positive when win chance dropped
 
-		const bool isBest = lossCp <= static_cast<int>(ChessConfig::BEST_LOSS_PAWNS * 100.0f);
+		const bool isBest = lossCp <= static_cast<int>(ChessConfig::BEST_LOSS_PAWNS * 100.0f) ||
+							(in.winChanceAfter >= in.winChanceBefore && lossPawns <= 0.25f);
 
-		if (onlyLegal)
-			return MoveQuality::Forced;
+		// 1. Decided game protection:
+		// When a player is already completely winning (win chance >= 95% or eval >= +6.00)
+		// and plays a move that remains completely winning (win chance >= 90% or eval >= +5.00),
+		// it is NOT a blunder, mistake, or miss just because Stockfish prefers a different mate distance.
+		bool wasDecisivelyWinning = in.evalBeforeCp >= 600 || in.winChanceBefore >= 0.95f;
+		bool remainsDecisivelyWinning = in.evalAfterCp >= 500 || in.winChanceAfter >= 0.90f;
 
-		// A "brilliant" is a best move that sacrifices material for a strong
-		// follow-up: the moved piece is en prise (hangs) or the move gives up
-		// a higher-value piece, yet the eval still improved or stayed winning.
-		if (isBest)
+		if (wasDecisivelyWinning && remainsDecisivelyWinning)
 		{
-			bool sac = t.hangsPiece && gainPawns >= 0.5f;
-			bool materialSac = in.move.isCapture && (t.hangsPiece || gainPawns >= 1.0f);
-			if ((sac || materialSac) && gainPawns >= 0.0f && in.evalAfterCp >= 50)
+			if (isBest || winLoss <= 0.02f || lossPawns <= 0.50f)
+				return t.capture ? MoveQuality::Great : MoveQuality::Best;
+			if (lossPawns <= 1.50f)
+				return MoveQuality::Excellent;
+			return MoveQuality::Good;
+		}
+
+		// 2. Brilliant move:
+		// Must be the best move (or near-best) and involve a genuine material sacrifice
+		// (non-pawn piece left hanging/en prise) that yields a winning/superior position.
+		if (isBest && in.evalAfterCp >= 150 && gainPawns >= 0.0f)
+		{
+			bool pieceSacrifice = t.hangsPiece && in.pieceMoved != PieceType::Pawn;
+			if (pieceSacrifice)
 				return MoveQuality::Brilliant;
 		}
 
-		// A forced win was available and ignored.
-		if (!isBest && in.bestMoveCp - in.evalBeforeCp >= static_cast<int>(ChessConfig::MISS_WIN_PAWNS * 100.0f))
-			return MoveQuality::Miss;
+		// 3. Miss: A winning advantage / tactic existed (eval was >= +2.00 or win chance >= 70%)
+		// and the player failed to find it, significantly throwing away the win (win chance drop >= 15% or loss >= 2.0
+		// pawns).
+		if (!isBest && in.evalBeforeCp >= 200 && (lossPawns >= ChessConfig::MISS_WIN_PAWNS || winLoss >= 0.15f))
+		{
+			if (in.evalAfterCp < 200)
+				return MoveQuality::Miss;
+		}
 
+		// 4. Best / Great Move
 		if (isBest)
 			return t.capture ? MoveQuality::Great : MoveQuality::Best;
 
-		if (lossPawns < ChessConfig::GOOD_LOSS_PAWNS)
+		// 5. Categorize by loss and win probability swing
+		if (lossPawns <= ChessConfig::EXCELLENT_LOSS_PAWNS && winLoss <= 0.05f)
 			return MoveQuality::Excellent;
 
-		if (lossPawns < ChessConfig::INACCURACY_LOSS_PAWNS)
+		if (lossPawns <= ChessConfig::GOOD_LOSS_PAWNS && winLoss <= 0.10f)
 			return MoveQuality::Good;
 
-		if (lossPawns < ChessConfig::MISTAKE_LOSS_PAWNS)
+		if (lossPawns <= ChessConfig::INACCURACY_LOSS_PAWNS && winLoss <= 0.18f)
 			return MoveQuality::Inaccuracy;
 
-		if (lossPawns < 5.0f)
+		if (lossPawns <= ChessConfig::MISTAKE_LOSS_PAWNS || winLoss <= 0.35f)
 			return MoveQuality::Mistake;
 
 		return MoveQuality::Blunder;

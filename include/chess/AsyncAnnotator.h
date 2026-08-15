@@ -111,17 +111,6 @@ namespace wchess
 			ann.onlyLegalMove = job.legalMoveCount <= 1;
 			ann.forced = ann.onlyLegalMove;
 
-			// --- classify ---
-			ClassificationInput input;
-			input.evalBeforeCp = ann.evalBeforeCp;
-			input.evalAfterCp = ann.evalAfterCp;
-			input.bestMoveCp = ann.bestMoveCp;
-			input.tactics = ann.tactics;
-			input.move = job.move;
-			input.legalMoveCount = job.legalMoveCount;
-			ann.quality = classify(input);
-
-			// --- decorate with semantic text ---
 			auto movingPiece = before.pieceAt(job.move.from);
 			const char* letter = "";
 			if (movingPiece)
@@ -151,19 +140,38 @@ namespace wchess
 				}
 			}
 
+			// --- classify ---
+			ClassificationInput input;
+			input.evalBeforeCp = ann.evalBeforeCp;
+			input.evalAfterCp = ann.evalAfterCp;
+			input.bestMoveCp = ann.bestMoveCp;
+			input.winChanceBefore = ann.winChanceBefore;
+			input.winChanceAfter = ann.winChanceAfter;
+			input.winChanceDelta = ann.winChanceDelta;
+			input.tactics = ann.tactics;
+			input.move = job.move;
+			input.pieceMoved = ann.pieceMoved;
+			input.legalMoveCount = job.legalMoveCount;
+			input.openingPly = job.fullMoveNumber;
+			ann.quality = classify(input);
+
 			// --- Trade / Exchange Detection ---
 			bool isRecapture = job.hasPrevMove && job.prevMove.isCapture && job.move.isCapture &&
 							   (job.move.to == job.prevMove.to || job.move.to == job.prevMove.from);
 
-			bool isEqualMaterialCapture =
+			chess::Square toSq(chess::File(job.move.to.file), chess::Rank(job.move.to.rank));
+			chess::Color enemyCh = job.mover == Color::White ? chess::Color::BLACK : chess::Color::WHITE;
+			bool isContestedSquare = before.raw().isAttacked(toSq, enemyCh);
+
+			bool isEqualMaterial =
 				ann.hasCapture && (pieceValue(ann.pieceMoved) == pieceValue(ann.pieceCaptured) ||
 								   (ann.pieceMoved == PieceType::Bishop && ann.pieceCaptured == PieceType::Knight) ||
 								   (ann.pieceMoved == PieceType::Knight && ann.pieceCaptured == PieceType::Bishop));
 
-			ann.isTrade = ann.hasCapture && (isRecapture || isEqualMaterialCapture);
 			ann.isRecapture = isRecapture;
-			ann.isQueenTrade =
-				ann.hasCapture && ann.pieceMoved == PieceType::Queen && ann.pieceCaptured == PieceType::Queen;
+			ann.isTrade = ann.hasCapture && (isRecapture || (isContestedSquare && isEqualMaterial));
+			ann.isQueenTrade = ann.hasCapture && ann.isTrade && ann.pieceMoved == PieceType::Queen &&
+							   ann.pieceCaptured == PieceType::Queen;
 
 			AnnotationWriter::decorate(ann, letter);
 

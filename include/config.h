@@ -36,7 +36,10 @@ namespace ChessConfig
 	inline constexpr int STORY_MAX_LINES = 28;
 
 	// ---- Animation ----
-	inline constexpr float MOVE_ANIM_SECONDS = .75f;
+	// Constant average movement speed (world units per second).
+	// CELL = 15.0f world units, so 60.0f speed = 4 squares/sec (0.25s per single square).
+	inline constexpr float MOVE_ANIM_SPEED = 60.0f;
+	inline constexpr float MOVE_ANIM_MIN_SECONDS = 0.15f; // minimum duration floor so short moves are not instantaneous
 
 	// ---- AI / engine ----
 	// Path candidates for the Stockfish binary (checked in order, first hit
@@ -58,10 +61,11 @@ namespace ChessConfig
 
 	// ---- Move classification thresholds (in pawns, 1 pawn = 100cp) ----
 	inline constexpr float BEST_LOSS_PAWNS = 0.15f;
-	inline constexpr float GOOD_LOSS_PAWNS = 0.5f;
-	inline constexpr float INACCURACY_LOSS_PAWNS = 1.0f;
-	inline constexpr float MISTAKE_LOSS_PAWNS = 2.5f;
-	inline constexpr float MISS_WIN_PAWNS = 2.0f; // a capture win this big that was ignored = "miss"
+	inline constexpr float EXCELLENT_LOSS_PAWNS = 0.40f;
+	inline constexpr float GOOD_LOSS_PAWNS = 0.85f;
+	inline constexpr float INACCURACY_LOSS_PAWNS = 1.75f;
+	inline constexpr float MISTAKE_LOSS_PAWNS = 3.50f;
+	inline constexpr float MISS_WIN_PAWNS = 2.0f; // a winning advantage that was surrendered = "miss"
 
 	inline constexpr int ANNOTATION_QUEUE_DEPTH = 32;
 } // namespace ChessConfig
