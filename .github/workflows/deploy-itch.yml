@@ -1,0 +1,78 @@
+name: Deploy to itch.io
+
+on:
+  # Run manually from the Actions tab
+  workflow_dispatch:
+  # Optionally also run when you push a version tag (e.g. v1.0)
+  # push:
+  #   tags:
+  #     - 'v*'
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-and-deploy:
+    name: Build Web & Push to itch.io
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      # ------------------------------------------------------------------------
+      # Build the Web (Emscripten / WASM) version
+      # ------------------------------------------------------------------------
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Build WeirdChess for Web
+        run: |
+          mkdir build && cd build
+          emcmake cmake .. \
+            -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+            -DBUILD_WEB=ON \
+            -DUSE_LOCAL_WEIRD_ENGINE=OFF \
+            -DWEIRDCHESS_BUILD_TESTS=OFF \
+            -DCMAKE_C_FLAGS="-pthread" \
+            -DCMAKE_CXX_FLAGS="-pthread" \
+            -DCMAKE_EXECUTABLE_SUFFIX=".html" \
+            -DCMAKE_EXE_LINKER_FLAGS="-pthread -sPTHREAD_POOL_SIZE=4 -sINITIAL_MEMORY=33554432 -sMAX_WEBGL_VERSION=2 -sMIN_WEBGL_VERSION=2 --preload-file ${{github.workspace}}/assets@/assets --preload-file ${{github.workspace}}/build/_deps/weirdengine-src/src/weird-renderer/fonts@/fonts --preload-file ${{github.workspace}}/build/_deps/weirdengine-src/src/weird-renderer/shaders@/shaders"
+          emmake make WeirdChess
+
+      - name: Prepare Web Artifact
+        run: |
+          mkdir -p game_export
+          cp build/index.* game_export/ 2>/dev/null || true
+          cp build/WeirdChess.* game_export/ 2>/dev/null || true
+
+          # Ensure index.html is present in the artifact
+          if [ -f src/index.html ]; then
+            cp src/index.html game_export/index.html
+          elif [ ! -f game_export/index.html ]; then
+            if [ -f game_export/WeirdChess.html ]; then
+              cp game_export/WeirdChess.html game_export/index.html
+            elif [ -f game_export/index.js ]; then
+              echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"><title>Weird Chess</title><style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden;display:flex;justify-content:center;align-items:center;}canvas{width:100vw;height:100vh;outline:none;border:0;display:block;}</style></head><body><canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas><script>var Module={canvas:document.getElementById("canvas")};</script><script src="index.js"></script></body></html>' > game_export/index.html
+            fi
+          fi
+
+          cp -r build/assets game_export/ 2>/dev/null || true
+          cp -r build/fonts game_export/ 2>/dev/null || true
+          cp -r build/shaders game_export/ 2>/dev/null || true
+
+      # ------------------------------------------------------------------------
+      # Publish to itch.io via Butler
+      # ------------------------------------------------------------------------
+      - name: Setup Butler
+        uses: remarkablegames/setup-butler@v2
+
+      - name: Push to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: butler push ./game_export/ damaca/weird-chess:html

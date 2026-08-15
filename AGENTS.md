@@ -62,8 +62,15 @@ pipeline + narrator thread. No window or ECS required.
   worker thread. Design doc: `include/narrator/llamacpp-integration.md`.
 - Style: C++20, Allman braces, tabs, 120-column limit (same as weird-engine).
   Run `clang-format -i <file>` after editing.
-- Git commits: DO NOT create git commits automatically unless the user
-  explicitly asks you to commit.
+
+## Commit Guidelines
+
+- **Policy**: DO NOT create git commits automatically unless the user explicitly asks you to commit.
+- **Naming Convention**: Use the imperative mood with a concise, sentence-cased summary starting with an active capitalized verb (`Add`, `Optimize`, `Enable`, `Improve`, `Fix`, etc.). Do NOT use scope/module prefixes or conventional commit tags (no `feat:`, `chess:`, `core:`, etc.).
+  - Good: `Add ease-in-out piece animations, knight parabolic hop, and delayed capture removal`
+  - Good: `Optimize highlight and piece entity pools to prevent runtime shader recompilation`
+  - Good: `Enable 2D lighting in displaySettings`
+  - Avoid: `feat(chess): add animations`, `core: optimize highlight pools`
 
 ## Gotchas
 
