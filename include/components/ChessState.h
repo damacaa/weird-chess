@@ -18,6 +18,8 @@ using WeirdEngine::vec2;
 #include "chess/ChessLibBoard.h"
 #include "chess/IChessAI.h"
 #include "config.h"
+#include "narrator/INarrator.h"
+#include "narrator/LlamaNarrator.h"
 #include "narrator/NarratorThread.h"
 #include "narrator/PassThroughNarrator.h"
 
@@ -40,7 +42,7 @@ namespace wchess
 		bool moveAppliedPendingAnnotation = false; // a move was applied, annotation still coming
 
 		// ---- narrator (worker thread) ----
-		std::shared_ptr<PassThroughNarrator> narratorImpl; // stage 1; stage 2 swaps this for LlamaNarrator
+		std::shared_ptr<INarrator> narratorImpl;
 		std::shared_ptr<NarratorThread> narrator;
 
 		// ---- board entities ----

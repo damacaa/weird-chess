@@ -106,12 +106,30 @@ if(BUILD_WEB)
     set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "index" SUFFIX ".html")
 endif()
 
+# -------------------------------------------------------------------------
+# LLAMA.CPP (Inference engine for story narrator)
+# -------------------------------------------------------------------------
+include(FetchContent)
+set(GGML_CUDA OFF CACHE BOOL "" FORCE)
+set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
+set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    llama
+    URL https://github.com/ggml-org/llama.cpp/archive/refs/tags/b4500.tar.gz
+)
+FetchContent_MakeAvailable(llama)
+
 # Set include directories.
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(${PROJECT_NAME} PRIVATE "${WEIRDCHESS_CHESS_INCLUDE}")
 
-# Link to WeirdEngine.
-target_link_libraries(${PROJECT_NAME} PRIVATE WeirdEngine)
+# Link to WeirdEngine and llama.
+target_link_libraries(${PROJECT_NAME} PRIVATE WeirdEngine llama)
 
 # Set Asset Path Macro
 if(DEPLOY_STANDALONE)
@@ -192,7 +210,7 @@ if(WEIRDCHESS_BUILD_TESTS)
         target_include_directories(WeirdChessTests PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/include"
             "${WEIRDCHESS_CHESS_INCLUDE}")
-        target_link_libraries(WeirdChessTests PRIVATE WeirdEngine)
+        target_link_libraries(WeirdChessTests PRIVATE WeirdEngine llama)
         target_compile_definitions(WeirdChessTests PRIVATE ASSETS_PATH="${ASSETS_PATH}")
         if (MINGW)
             target_link_options(WeirdChessTests PRIVATE -static -static-libgcc -static-libstdc++)

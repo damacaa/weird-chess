@@ -22,5 +22,8 @@ namespace wchess
 		virtual void narrate(const MoveAnnotation& annotation, StoryStream& out) = 0;
 
 		virtual std::string name() const = 0;
+
+		virtual void cancel() {}
+		virtual void reset() {}
 	};
 } // namespace wchess

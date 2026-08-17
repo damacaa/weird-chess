@@ -47,6 +47,15 @@ namespace ChessConfig
 	inline const std::string STOCKFISH_PATH_ENV = "STOCKFISH_PATH";
 	inline const std::vector<std::string> STOCKFISH_CANDIDATES = {"bin/stockfish", "../bin/stockfish"};
 
+	// ---- LLM Narrator (llama.cpp) ----
+	inline const std::string LLAMA_MODEL_PATH_ENV = "LLAMA_MODEL_PATH";
+	inline const std::vector<std::string> LLAMA_MODEL_DIRECTORIES = {
+		"assets/model",
+		"assets/models",
+		"bin/models",
+		"models"
+	};
+
 	// Human-strength defaults: tuned for very easy / casual play.
 	inline constexpr int DEFAULT_SKILL = 0;			  // 0-20 Stockfish internal skill knob
 	inline constexpr int DEFAULT_ELO = 1320;		  // minimum UCI_Elo

@@ -58,6 +58,8 @@ namespace wchess
 		// Signals the worker to finish pending work and join. Idempotent.
 		void stop()
 		{
+			if (m_narrator)
+				m_narrator->cancel();
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
 				if (!m_running)
@@ -67,6 +69,16 @@ namespace wchess
 			m_cv.notify_one();
 			if (m_thread.joinable())
 				m_thread.join();
+		}
+
+		void reset()
+		{
+			if (m_narrator)
+				m_narrator->reset();
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_queue.clear();
+			}
 		}
 
 		// Shared stream the main thread drains. Never null.

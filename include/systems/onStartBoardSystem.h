@@ -17,6 +17,7 @@
 #include "systems/moveSystem.h"
 
 #include <cstdlib>
+#include <filesystem>
 
 namespace wchess
 {
@@ -71,7 +72,72 @@ namespace wchess
 		state.annotator->start();
 
 		// ---- narrator (worker thread) ----
-		state.narratorImpl = std::make_shared<PassThroughNarrator>();
+		// Model discovery: look for .gguf files in assets/model/ (or configured dirs/env var)
+		std::string modelPath;
+		if (const char* env = std::getenv(ChessConfig::LLAMA_MODEL_PATH_ENV.c_str()))
+		{
+			WeirdEngine::Logger::log("[WeirdChess] " + ChessConfig::LLAMA_MODEL_PATH_ENV + " environment override: " + env);
+			modelPath = env;
+		}
+		else
+		{
+			std::vector<std::string> searchDirs;
+#ifdef ASSETS_PATH
+			searchDirs.push_back(std::string(ASSETS_PATH) + "model");
+			searchDirs.push_back(std::string(ASSETS_PATH) + "models");
+#endif
+			for (const auto& dir : ChessConfig::LLAMA_MODEL_DIRECTORIES)
+			{
+				searchDirs.push_back(dir);
+				searchDirs.push_back("../" + dir);
+			}
+
+			for (const auto& dir : searchDirs)
+			{
+				std::error_code ec;
+				if (std::filesystem::exists(dir, ec) && std::filesystem::is_directory(dir, ec))
+				{
+					for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
+					{
+						std::string ext = entry.path().extension().string();
+						// Case-insensitive check for .gguf
+						std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+						if (entry.is_regular_file() && ext == ".gguf")
+						{
+							modelPath = entry.path().string();
+							WeirdEngine::Logger::log("[WeirdChess] Discovered model candidate: " + modelPath);
+							break;
+						}
+					}
+				}
+				if (!modelPath.empty())
+					break;
+			}
+
+			if (modelPath.empty())
+			{
+				std::string searchLog = "[WeirdChess] No GGUF model files found. Checked directories:\n";
+				for (const auto& dir : searchDirs)
+				{
+					std::error_code ec;
+					bool exists = std::filesystem::exists(dir, ec);
+					searchLog += "  - " + dir + (exists ? " [EXISTS, no .gguf]\n" : " [NOT FOUND]\n");
+				}
+				WeirdEngine::Logger::warning(searchLog);
+			}
+		}
+
+		auto llama = std::make_shared<LlamaNarrator>();
+		if (!modelPath.empty() && llama->load(modelPath))
+		{
+			state.narratorImpl = llama;
+		}
+		else
+		{
+			WeirdEngine::Logger::log("[WeirdChess] Falling back to engine move annotation narrator.");
+			state.narratorImpl = std::make_shared<PassThroughNarrator>();
+		}
+
 		state.narrator = std::make_shared<NarratorThread>(state.narratorImpl);
 		state.narrator->start();
 
