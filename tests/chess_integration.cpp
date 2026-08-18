@@ -560,7 +560,53 @@ static void testTextWrapping()
 	CHECK(storyLines[5] == "Best e5");
 	CHECK(storyLines[6] == "(0.00)");
 
-	printf("text wrapping checks passed\n");
+	// 5. Typewriter char-by-char line builder
+	{
+		std::vector<std::string> lines = {"Hello", "world", "", "Chess"};
+		size_t total = NarrativeRenderSystem::countTotalChars(lines);
+		CHECK(total == 15); // 5 + 5 + 0 + 5
+
+		auto d0 = NarrativeRenderSystem::buildTypewriterLines(lines, 0);
+		CHECK(d0.empty());
+
+		auto d3 = NarrativeRenderSystem::buildTypewriterLines(lines, 3);
+		CHECK(d3.size() == 1);
+		CHECK(d3[0] == "Hel");
+
+		auto d5 = NarrativeRenderSystem::buildTypewriterLines(lines, 5);
+		CHECK(d5.size() == 1);
+		CHECK(d5[0] == "Hello");
+
+		auto d8 = NarrativeRenderSystem::buildTypewriterLines(lines, 8);
+		CHECK(d8.size() == 2);
+		CHECK(d8[0] == "Hello");
+		CHECK(d8[1] == "wor");
+
+		auto d10 = NarrativeRenderSystem::buildTypewriterLines(lines, 10);
+		CHECK(d10.size() == 2);
+		CHECK(d10[0] == "Hello");
+		CHECK(d10[1] == "world");
+
+		auto d11 = NarrativeRenderSystem::buildTypewriterLines(lines, 11);
+		CHECK(d11.size() == 4);
+		CHECK(d11[0] == "Hello");
+		CHECK(d11[1] == "world");
+		CHECK(d11[2] == "");
+		CHECK(d11[3] == "C");
+
+		auto d15 = NarrativeRenderSystem::buildTypewriterLines(lines, 15);
+		CHECK(d15.size() == 4);
+		CHECK(d15[0] == "Hello");
+		CHECK(d15[1] == "world");
+		CHECK(d15[2] == "");
+		CHECK(d15[3] == "Chess");
+
+		auto d20 = NarrativeRenderSystem::buildTypewriterLines(lines, 20);
+		CHECK(d20.size() == 4);
+		CHECK(d20 == lines);
+	}
+
+	printf("text wrapping and typewriter checks passed\n");
 }
 
 static void testGameIntensity()

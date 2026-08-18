@@ -107,6 +107,10 @@ namespace wchess
 		int storyVisibleLines = ChessConfig::STORY_MAX_LINES; // set by layoutSystem
 		std::deque<std::string> storyText;					  // visible story lines (front = top)
 		std::vector<std::string> rawStoryChunks;			  // full history of raw story paragraphs
+		std::vector<std::string> formattedStoryLines;		  // wrapped story lines
+		float storyRevealedChars = 0.0f;					  // character reveal progress for typewriter
+		size_t lastTotalStoryChars = 0;						  // total chars across wrapped lines
+		float typewriterSpeed = ChessConfig::STORY_TYPEWRITER_MIN_SPEED; // chars/sec
 		int lastWrapChars = 0;								  // last computed wrap width in characters
 		float currentIntensity = 0.0f;						  // smoothly interpolated intensity in [0.0, 1.0]
 		float targetIntensity = 0.0f;						  // target intensity driving background shader

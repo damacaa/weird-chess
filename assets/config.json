@@ -3,6 +3,7 @@
     "name": "tinyllama-15M-stories-Q2_K.gguf",
     "description": "Model filename inside assets/model/ (or leave empty to auto-detect any .gguf)"
   },
+  "typewriter_speed": 18.0,
   "enemy": {
     "difficulty": "easy",
     "skill_level": 0,

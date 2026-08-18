@@ -42,6 +42,11 @@ namespace ChessConfig
 	inline constexpr int STORY_MAX_LINES = 64;
 	inline constexpr std::string_view STORY_INTRO_PLACEHOLDER = "The game begins.";
 
+	// Typewriter text pacing (characters per second)
+	// Slows down text rendering with a minimum speed floor so AI text updates smoothly char by char
+	inline constexpr float STORY_TYPEWRITER_MIN_SPEED = 18.0f; // characters per second floor (~55ms / char)
+	inline constexpr float STORY_TYPEWRITER_MAX_SPEED = 36.0f; // catch-up speed ceiling during large queues
+
 	// ---- Animation ----
 	// Constant average movement speed (world units per second).
 	// CELL = 15.0f world units, so 60.0f speed = 4 squares/sec (0.25s per single square).
@@ -92,6 +97,7 @@ namespace ChessConfig
 		int elo = DEFAULT_ELO;          // 1320
 		int searchDepth = AI_SEARCH_DEPTH; // 1
 		float blunderChance = AI_BLUNDER_CHANCE; // 0.35f
+		float typewriterSpeed = STORY_TYPEWRITER_MIN_SPEED; // 18.0f chars/sec
 	};
 
 	inline GameSettings loadGameSettings(const std::string& assetsPath = "")
@@ -149,6 +155,16 @@ namespace ChessConfig
 			else if (j.contains("model_name") && j["model_name"].is_string())
 			{
 				settings.modelName = j["model_name"].get<std::string>();
+			}
+
+			// Typewriter speed configuration
+			if (j.contains("typewriter_speed") && j["typewriter_speed"].is_number())
+			{
+				settings.typewriterSpeed = j["typewriter_speed"].get<float>();
+			}
+			else if (j.contains("story_speed") && j["story_speed"].is_number())
+			{
+				settings.typewriterSpeed = j["story_speed"].get<float>();
 			}
 
 			// 2. Enemy / AI difficulty configuration

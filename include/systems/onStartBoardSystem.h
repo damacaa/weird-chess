@@ -31,10 +31,12 @@ namespace wchess
 
 		// ---- load human-readable config (assets/config.json) ----
 		ChessConfig::GameSettings gameSettings = ChessConfig::loadGameSettings();
+		state.typewriterSpeed = gameSettings.typewriterSpeed;
 		WeirdEngine::Logger::log("[WeirdChess] Config loaded: difficulty='" + gameSettings.difficulty +
 								 "' (skill=" + std::to_string(gameSettings.skillLevel) +
 								 ", elo=" + std::to_string(gameSettings.elo) +
-								 "), model='" + gameSettings.modelName + "'");
+								 "), model='" + gameSettings.modelName + "'" +
+								 ", typewriter_speed=" + std::to_string(gameSettings.typewriterSpeed) + ")");
 
 		// Stockfish if available, otherwise our in-process MinimaxAI.
 		std::string sfPath;

@@ -392,7 +392,10 @@ namespace wchess
 				state.narrator->pushIntro();
 			}
 			state.rawStoryChunks.clear();
+			state.formattedStoryLines.clear();
 			state.storyText.clear();
+			state.storyRevealedChars = 0.0f;
+			state.lastTotalStoryChars = 0;
 			state.currentIntensity = 0.0f;
 			state.targetIntensity = 0.0f;
 			services.render().getBackground().intensity = 0.0f;

@@ -120,6 +120,57 @@ namespace wchess
 			return allLines;
 		}
 
+		// Counts total character content across non-empty lines
+		inline size_t countTotalChars(const std::vector<std::string>& allLines)
+		{
+			size_t total = 0;
+			for (const auto& line : allLines)
+			{
+				total += line.size();
+			}
+			return total;
+		}
+
+		// Builds displayed lines up to `revealedChars` character count across `allLines`
+		inline std::vector<std::string> buildTypewriterLines(const std::vector<std::string>& allLines,
+															 size_t revealedChars)
+		{
+			std::vector<std::string> displayedLines;
+			size_t charsLeft = revealedChars;
+
+			for (size_t i = 0; i < allLines.size(); ++i)
+			{
+				const std::string& line = allLines[i];
+				if (line.empty())
+				{
+					// Only keep empty separator line if we reached it and have more characters ahead
+					if (i < allLines.size() - 1 && charsLeft > 0)
+					{
+						displayedLines.push_back("");
+					}
+					continue;
+				}
+
+				if (charsLeft == 0)
+				{
+					break;
+				}
+
+				if (charsLeft >= line.size())
+				{
+					displayedLines.push_back(line);
+					charsLeft -= line.size();
+				}
+				else
+				{
+					displayedLines.push_back(line.substr(0, charsLeft));
+					charsLeft = 0;
+					break;
+				}
+			}
+			return displayedLines;
+		}
+
 		inline void update(Registry& registry, ServiceProvider& services)
 		{
 			ChessState& state = getState(registry);
@@ -128,14 +179,14 @@ namespace wchess
 
 			const int wrapChars = calculateWrapChars(services);
 
-			bool newChunks = false;
+			bool dirtyLines = false;
 			// Drain anything the narrator produced this frame.
 			if (state.narrator)
 			{
 				auto chunks = state.narrator->stream()->drain();
 				if (!chunks.empty())
 				{
-					newChunks = true;
+					dirtyLines = true;
 					for (auto& chunk : chunks)
 					{
 						state.rawStoryChunks.push_back(chunk);
@@ -143,37 +194,74 @@ namespace wchess
 				}
 			}
 
-			if (newChunks || wrapChars != state.lastWrapChars || state.layoutDirty)
+			if (dirtyLines || wrapChars != state.lastWrapChars || state.layoutDirty)
 			{
+				bool isResizeOnly = !dirtyLines && (wrapChars != state.lastWrapChars || state.layoutDirty);
 				state.lastWrapChars = wrapChars;
 				state.layoutDirty = false;
+				state.formattedStoryLines = formatStoryLines(state.rawStoryChunks, wrapChars);
+				size_t newTotalChars = countTotalChars(state.formattedStoryLines);
 
-				std::vector<std::string> allLines = formatStoryLines(state.rawStoryChunks, wrapChars);
-
-				// Keep only the visible window of lines (tail)
-				size_t startLineIdx = allLines.size() > static_cast<size_t>(state.storyVisibleLines)
-										  ? allLines.size() - static_cast<size_t>(state.storyVisibleLines)
-										  : 0;
-
-				state.storyText.clear();
-				for (size_t i = 0; i < state.storyLines.size(); ++i)
+				if (isResizeOnly && state.lastTotalStoryChars > 0 &&
+					state.storyRevealedChars >= static_cast<float>(state.lastTotalStoryChars))
 				{
-					size_t lineIdx = startLineIdx + i;
-					std::string content =
-						(i < static_cast<size_t>(state.storyVisibleLines) && lineIdx < allLines.size())
-							? allLines[lineIdx]
-							: "";
-					if (i < static_cast<size_t>(state.storyVisibleLines) && lineIdx < allLines.size())
-					{
-						state.storyText.push_back(content);
-					}
+					// If all text was already fully revealed and only the window resized, keep it revealed
+					state.storyRevealedChars = static_cast<float>(newTotalChars);
+				}
+				else
+				{
+					// For new chunks or in-progress typing, clamp to new total without jumping ahead
+					state.storyRevealedChars = std::min(state.storyRevealedChars, static_cast<float>(newTotalChars));
+				}
+				state.lastTotalStoryChars = newTotalChars;
+			}
 
-					auto& text = registry.getComponent<UITextRenderer>(state.storyLines[i]);
-					if (text.text != content)
-					{
-						text.text = content;
-						registry.setComponentDirty(text);
-					}
+			const size_t totalChars = state.lastTotalStoryChars;
+
+			// Progress the char-by-char typewriter effect
+			if (state.storyRevealedChars < static_cast<float>(totalChars))
+			{
+				float dt = std::clamp(services.time().deltaTime(), 0.0f, 0.1f);
+				float pending = static_cast<float>(totalChars) - state.storyRevealedChars;
+				float baseSpeed = state.typewriterSpeed > 0.0f ? state.typewriterSpeed
+															   : ChessConfig::STORY_TYPEWRITER_MIN_SPEED;
+				float maxSpeed = std::max(baseSpeed, baseSpeed * 2.0f);
+				float speed = baseSpeed;
+				if (pending > 80.0f)
+				{
+					speed = std::clamp(speed + (pending - 80.0f) * 0.15f, speed, maxSpeed);
+				}
+				state.storyRevealedChars =
+					std::min(static_cast<float>(totalChars), state.storyRevealedChars + speed * dt);
+			}
+
+			// Render the displayed lines based on current revealed character count
+			std::vector<std::string> displayedLines =
+				buildTypewriterLines(state.formattedStoryLines, static_cast<size_t>(state.storyRevealedChars));
+
+			// Keep only the visible window of lines (tail)
+			size_t startLineIdx = displayedLines.size() > static_cast<size_t>(state.storyVisibleLines)
+									  ? displayedLines.size() - static_cast<size_t>(state.storyVisibleLines)
+									  : 0;
+
+			state.storyText.clear();
+			for (size_t i = 0; i < state.storyLines.size(); ++i)
+			{
+				size_t lineIdx = startLineIdx + i;
+				std::string content =
+					(i < static_cast<size_t>(state.storyVisibleLines) && lineIdx < displayedLines.size())
+						? displayedLines[lineIdx]
+						: "";
+				if (i < static_cast<size_t>(state.storyVisibleLines) && lineIdx < displayedLines.size())
+				{
+					state.storyText.push_back(content);
+				}
+
+				auto& text = registry.getComponent<UITextRenderer>(state.storyLines[i]);
+				if (text.text != content)
+				{
+					text.text = content;
+					registry.setComponentDirty(text);
 				}
 			}
 
