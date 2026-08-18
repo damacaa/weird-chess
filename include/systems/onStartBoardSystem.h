@@ -29,6 +29,13 @@ namespace wchess
 		state.board = std::make_shared<ChessLibBoard>();
 		state.board->loadStartPosition();
 
+		// ---- load human-readable config (assets/config.json) ----
+		ChessConfig::GameSettings gameSettings = ChessConfig::loadGameSettings();
+		WeirdEngine::Logger::log("[WeirdChess] Config loaded: difficulty='" + gameSettings.difficulty +
+								 "' (skill=" + std::to_string(gameSettings.skillLevel) +
+								 ", elo=" + std::to_string(gameSettings.elo) +
+								 "), model='" + gameSettings.modelName + "'");
+
 		// Stockfish if available, otherwise our in-process MinimaxAI.
 		std::string sfPath;
 		if (const char* env = std::getenv(ChessConfig::STOCKFISH_PATH_ENV.c_str()))
@@ -54,15 +61,15 @@ namespace wchess
 			auto stockfish = std::make_shared<StockfishUCIAI>(sfPath);
 			if (stockfish->isAvailable())
 			{
-				stockfish->setStrength(ChessConfig::DEFAULT_SKILL, ChessConfig::DEFAULT_ELO);
+				stockfish->setStrength(gameSettings.skillLevel, gameSettings.elo);
 				state.ai = stockfish;
 			}
 		}
 		if (!state.ai)
 		{
-			std::cout << "[WeirdChess] Stockfish binary not found, using in-process MinimaxAI." << std::endl;
+			WeirdEngine::Logger::log("[WeirdChess] Stockfish binary not found, using in-process MinimaxAI.");
 			auto minimax = std::make_shared<MinimaxAI>();
-			minimax->setStrength(ChessConfig::DEFAULT_SKILL, ChessConfig::DEFAULT_ELO);
+			minimax->setStrength(gameSettings.skillLevel, gameSettings.elo);
 			state.ai = minimax;
 		}
 
@@ -72,7 +79,7 @@ namespace wchess
 		state.annotator->start();
 
 		// ---- narrator (worker thread) ----
-		// Model discovery: look for .gguf files in assets/model/ (or configured dirs/env var)
+		// Model discovery: look for configured modelName or any .gguf files
 		std::string modelPath;
 		if (const char* env = std::getenv(ChessConfig::LLAMA_MODEL_PATH_ENV.c_str()))
 		{
@@ -92,26 +99,45 @@ namespace wchess
 				searchDirs.push_back("../" + dir);
 			}
 
-			for (const auto& dir : searchDirs)
+			// 1. Check if configured modelName exists in any search directory
+			if (!gameSettings.modelName.empty())
 			{
-				std::error_code ec;
-				if (std::filesystem::exists(dir, ec) && std::filesystem::is_directory(dir, ec))
+				for (const auto& dir : searchDirs)
 				{
-					for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
+					std::string candidate = dir + "/" + gameSettings.modelName;
+					std::error_code ec;
+					if (std::filesystem::exists(candidate, ec) && std::filesystem::is_regular_file(candidate, ec))
 					{
-						std::string ext = entry.path().extension().string();
-						// Case-insensitive check for .gguf
-						std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-						if (entry.is_regular_file() && ext == ".gguf")
-						{
-							modelPath = entry.path().string();
-							WeirdEngine::Logger::log("[WeirdChess] Discovered model candidate: " + modelPath);
-							break;
-						}
+						modelPath = candidate;
+						WeirdEngine::Logger::log("[WeirdChess] Found configured model: " + modelPath);
+						break;
 					}
 				}
-				if (!modelPath.empty())
-					break;
+			}
+
+			// 2. If not found, scan search directories for any .gguf file
+			if (modelPath.empty())
+			{
+				for (const auto& dir : searchDirs)
+				{
+					std::error_code ec;
+					if (std::filesystem::exists(dir, ec) && std::filesystem::is_directory(dir, ec))
+					{
+						for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
+						{
+							std::string ext = entry.path().extension().string();
+							std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+							if (entry.is_regular_file() && ext == ".gguf")
+							{
+								modelPath = entry.path().string();
+								WeirdEngine::Logger::log("[WeirdChess] Discovered model candidate: " + modelPath);
+								break;
+							}
+						}
+					}
+					if (!modelPath.empty())
+						break;
+				}
 			}
 
 			if (modelPath.empty())

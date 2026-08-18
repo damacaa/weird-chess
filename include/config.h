@@ -3,8 +3,13 @@
 // Game tuning constants. Central place for every number that affects the
 // board layout, the camera framing and the AI behaviour.
 
+#include <algorithm>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <string>
+#include <vector>
+#include <json/json.h>
 
 namespace ChessConfig
 {
@@ -76,5 +81,142 @@ namespace ChessConfig
 	inline constexpr float MISTAKE_LOSS_PAWNS = 3.50f;
 	inline constexpr float MISS_WIN_PAWNS = 2.0f; // a winning advantage that was surrendered = "miss"
 
-	inline constexpr int ANNOTATION_QUEUE_DEPTH = 32;
+	// ---- Human-readable Configuration (assets/config.json) ----
+	struct GameSettings
+	{
+		std::string modelName = "tinyllama-15M-stories-Q2_K.gguf";
+		std::string difficulty = "easy";
+		int skillLevel = DEFAULT_SKILL; // 0
+		int elo = DEFAULT_ELO;          // 1320
+		int searchDepth = AI_SEARCH_DEPTH; // 1
+		float blunderChance = AI_BLUNDER_CHANCE; // 0.35f
+	};
+
+	inline GameSettings loadGameSettings(const std::string& assetsPath = "")
+	{
+		GameSettings settings;
+
+		std::vector<std::string> candidates;
+		if (!assetsPath.empty())
+		{
+			candidates.push_back(assetsPath + "/config.json");
+			candidates.push_back(assetsPath + "config.json");
+		}
+#ifdef ASSETS_PATH
+		candidates.push_back(std::string(ASSETS_PATH) + "config.json");
+#endif
+		candidates.push_back("assets/config.json");
+		candidates.push_back("../assets/config.json");
+		candidates.push_back("config.json");
+
+		std::string foundPath;
+		for (const auto& path : candidates)
+		{
+			std::error_code ec;
+			if (std::filesystem::exists(path, ec) && std::filesystem::is_regular_file(path, ec))
+			{
+				foundPath = path;
+				break;
+			}
+		}
+
+		if (foundPath.empty())
+			return settings;
+
+		try
+		{
+			std::ifstream file(foundPath);
+			if (!file.is_open())
+				return settings;
+
+			nlohmann::json j;
+			file >> j;
+
+			// 1. Model configuration
+			if (j.contains("model"))
+			{
+				if (j["model"].is_object() && j["model"].contains("name") && j["model"]["name"].is_string())
+				{
+					settings.modelName = j["model"]["name"].get<std::string>();
+				}
+				else if (j["model"].is_string())
+				{
+					settings.modelName = j["model"].get<std::string>();
+				}
+			}
+			else if (j.contains("model_name") && j["model_name"].is_string())
+			{
+				settings.modelName = j["model_name"].get<std::string>();
+			}
+
+			// 2. Enemy / AI difficulty configuration
+			std::string diff = "easy";
+			if (j.contains("enemy"))
+			{
+				const auto& enemy = j["enemy"];
+				if (enemy.is_object())
+				{
+					if (enemy.contains("difficulty") && enemy["difficulty"].is_string())
+						diff = enemy["difficulty"].get<std::string>();
+					if (enemy.contains("skill_level") && enemy["skill_level"].is_number_integer())
+						settings.skillLevel = enemy["skill_level"].get<int>();
+					if (enemy.contains("elo") && enemy["elo"].is_number_integer())
+						settings.elo = enemy["elo"].get<int>();
+					if (enemy.contains("search_depth") && enemy["search_depth"].is_number_integer())
+						settings.searchDepth = enemy["search_depth"].get<int>();
+					if (enemy.contains("blunder_chance") && enemy["blunder_chance"].is_number())
+						settings.blunderChance = enemy["blunder_chance"].get<float>();
+				}
+				else if (enemy.is_string())
+				{
+					diff = enemy.get<std::string>();
+				}
+			}
+			else if (j.contains("difficulty") && j["difficulty"].is_string())
+			{
+				diff = j["difficulty"].get<std::string>();
+			}
+
+			std::transform(diff.begin(), diff.end(), diff.begin(), ::tolower);
+			settings.difficulty = diff;
+
+			if (!j.contains("enemy") || !j["enemy"].is_object() || !j["enemy"].contains("skill_level"))
+			{
+				if (diff == "easy")
+				{
+					settings.skillLevel = 0;
+					settings.elo = 1320;
+					settings.searchDepth = 1;
+					settings.blunderChance = 0.35f;
+				}
+				else if (diff == "medium" || diff == "normal")
+				{
+					settings.skillLevel = 5;
+					settings.elo = 1600;
+					settings.searchDepth = 3;
+					settings.blunderChance = 0.15f;
+				}
+				else if (diff == "hard")
+				{
+					settings.skillLevel = 12;
+					settings.elo = 2000;
+					settings.searchDepth = 5;
+					settings.blunderChance = 0.05f;
+				}
+				else if (diff == "master" || diff == "expert" || diff == "max")
+				{
+					settings.skillLevel = 20;
+					settings.elo = 2500;
+					settings.searchDepth = 8;
+					settings.blunderChance = 0.0f;
+				}
+			}
+		}
+		catch (const std::exception&)
+		{
+			// parsing failed, use default settings
+		}
+
+		return settings;
+	}
 } // namespace ChessConfig

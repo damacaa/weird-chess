@@ -1,0 +1,14 @@
+{
+  "model": {
+    "name": "tinyllama-15M-stories-Q2_K.gguf",
+    "description": "Model filename inside assets/model/ (or leave empty to auto-detect any .gguf)"
+  },
+  "enemy": {
+    "difficulty": "easy",
+    "skill_level": 0,
+    "elo": 1320,
+    "search_depth": 1,
+    "blunder_chance": 0.35,
+    "description": "Difficulty preset ('easy', 'medium', 'hard', 'master') or custom skill_level (0-20) and elo (1320-3000)"
+  }
+}
