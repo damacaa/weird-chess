@@ -387,7 +387,9 @@ namespace wchess
 
 			if (state.narrator)
 			{
+				state.narrator->reset();
 				state.narrator->stream()->clear();
+				state.narrator->pushIntro();
 			}
 			state.rawStoryChunks.clear();
 			state.storyText.clear();

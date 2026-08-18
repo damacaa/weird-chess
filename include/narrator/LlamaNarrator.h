@@ -7,6 +7,7 @@
 
 #include "chess/AnnotationWriter.h"
 #include "chess/ChessTypes.h"
+#include "config.h"
 #include "llama.h"
 #include "narrator/INarrator.h"
 #include "narrator/StoryStream.h"
@@ -121,6 +122,45 @@ namespace wchess
 		bool isLoaded() const
 		{
 			return m_model != nullptr && m_ctx != nullptr;
+		}
+
+		void narrateIntro(StoryStream& out) override
+		{
+			if (!isLoaded())
+			{
+				out.append(std::string(ChessConfig::STORY_INTRO_PLACEHOLDER));
+				out.setStatus(StoryStatus::Idle);
+				return;
+			}
+
+			std::string prompt =
+				"You are a serialized fiction narrator. Write a single dramatic opening sentence about two rival forces facing each other in silence before an imminent conflict. Do NOT use any chess words (no king, queen, bishop, knight, rook, pawn, board, check, checkmate, square).\n"
+				"Story:";
+
+			WeirdEngine::Logger::log("[LlamaNarrator] Generating opening story intro...");
+			out.setStatus(StoryStatus::Generating);
+
+			std::string generatedText = generateStateless(prompt, 60);
+
+			if (!generatedText.empty())
+			{
+				std::string clean = sanitizeForEngine(generatedText);
+				if (!clean.empty())
+				{
+					WeirdEngine::Logger::log("[LlamaNarrator] Generated intro: \"" + clean + "\"");
+					out.append(clean);
+				}
+				else
+				{
+					out.append(std::string(ChessConfig::STORY_INTRO_PLACEHOLDER));
+				}
+			}
+			else
+			{
+				out.append(std::string(ChessConfig::STORY_INTRO_PLACEHOLDER));
+			}
+
+			out.setStatus(StoryStatus::Idle);
 		}
 
 		void narrate(const MoveAnnotation& annotation, StoryStream& out) override

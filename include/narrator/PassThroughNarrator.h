@@ -10,6 +10,7 @@
 // Swap in LlamaNarrator in stage 2 (see llamacpp-integration.md).
 
 #include "chess/AnnotationWriter.h"
+#include "config.h"
 #include "narrator/INarrator.h"
 
 #include <chrono>
@@ -24,6 +25,12 @@ namespace wchess
 		std::string name() const override
 		{
 			return "passthrough";
+		}
+
+		void narrateIntro(StoryStream& out) override
+		{
+			out.append(std::string(ChessConfig::STORY_INTRO_PLACEHOLDER));
+			out.setStatus(StoryStatus::Idle);
 		}
 
 		void narrate(const MoveAnnotation& annotation, StoryStream& out) override

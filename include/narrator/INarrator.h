@@ -20,6 +20,7 @@ namespace wchess
 		// Called on the worker thread. Implementations write prose chunks to
 		// `out` (and may set the status). Never touch the ECS here.
 		virtual void narrate(const MoveAnnotation& annotation, StoryStream& out) = 0;
+		virtual void narrateIntro(StoryStream& out) = 0;
 
 		virtual std::string name() const = 0;
 

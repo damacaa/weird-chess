@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <json/json.h>
 
@@ -39,6 +40,7 @@ namespace ChessConfig
 	inline constexpr float PANEL_RIGHT_MARGIN_PX = 24.0f;
 	inline constexpr float PANEL_TOP_MARGIN_PX = 56.0f;
 	inline constexpr int STORY_MAX_LINES = 64;
+	inline constexpr std::string_view STORY_INTRO_PLACEHOLDER = "The game begins.";
 
 	// ---- Animation ----
 	// Constant average movement speed (world units per second).

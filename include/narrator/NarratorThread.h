@@ -19,6 +19,18 @@
 
 namespace wchess
 {
+	enum class NarratorJobType
+	{
+		Move,
+		Intro
+	};
+
+	struct NarratorJob
+	{
+		NarratorJobType type = NarratorJobType::Move;
+		MoveAnnotation annotation;
+	};
+
 	class NarratorThread
 	{
 	public:
@@ -50,7 +62,19 @@ namespace wchess
 				std::lock_guard<std::mutex> lock(m_mutex);
 				if (!m_running)
 					return;
-				m_queue.push_back(annotation);
+				m_queue.push_back({NarratorJobType::Move, annotation});
+			}
+			m_cv.notify_one();
+		}
+
+		// Enqueue intro generation. Non-blocking.
+		void pushIntro()
+		{
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				if (!m_running)
+					return;
+				m_queue.push_back({NarratorJobType::Intro, {}});
 			}
 			m_cv.notify_one();
 		}
@@ -103,16 +127,23 @@ namespace wchess
 		{
 			while (true)
 			{
-				MoveAnnotation annotation;
+				NarratorJob job;
 				{
 					std::unique_lock<std::mutex> lock(m_mutex);
 					m_cv.wait(lock, [this] { return !m_running || !m_queue.empty(); });
 					if (!m_running && m_queue.empty())
 						break;
-					annotation = m_queue.front();
+					job = m_queue.front();
 					m_queue.pop_front();
 				}
-				m_narrator->narrate(annotation, *m_stream);
+				if (job.type == NarratorJobType::Intro)
+				{
+					m_narrator->narrateIntro(*m_stream);
+				}
+				else
+				{
+					m_narrator->narrate(job.annotation, *m_stream);
+				}
 			}
 		}
 
@@ -122,7 +153,7 @@ namespace wchess
 		std::thread m_thread;
 		mutable std::mutex m_mutex;
 		std::condition_variable m_cv;
-		std::deque<MoveAnnotation> m_queue;
+		std::deque<NarratorJob> m_queue;
 		bool m_running = false;
 	};
 } // namespace wchess

@@ -166,6 +166,7 @@ namespace wchess
 
 		state.narrator = std::make_shared<NarratorThread>(state.narratorImpl);
 		state.narrator->start();
+		state.narrator->pushIntro();
 
 		// ---- background + text sizes ----
 		auto& bg = services.render().getBackground();
