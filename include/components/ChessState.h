@@ -72,13 +72,19 @@ namespace wchess
 		int promoFrom = -1;
 		int promoTo = -1;
 
-		// ---- move animations ----
+		// ---- move animations & sound ----
 		std::vector<Entity> animatingPieces; // piece entities currently moving
 		std::vector<vec2> animFrom;
 		std::vector<vec2> animTo;
 		std::vector<float> animT;
 		std::vector<float> animDuration;
 		std::vector<Entity> capturedPiecesPendingRemoval; // captured pieces hidden at end of move animation
+		bool lastMoveWasCapture = false;
+		Color lastMoveMover = Color::White;
+		bool lastMoveDeliveredCheck = false;
+		bool checkmateJingleTriggered = false;
+		float checkmateJingleTimer = -1.0f;
+		int checkmateJingleStep = 0;
 
 		// ---- annotations ----
 		MoveAnnotation lastAnnotation;

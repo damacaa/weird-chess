@@ -269,12 +269,18 @@ namespace wchess
 				state.capturedPiecesPendingRemoval.push_back(capturedEntity);
 			}
 
+			bool isCapture = (capturedEntity != INVALID_ENTITY) || move.isCapture;
+			state.lastMoveWasCapture = isCapture;
+			state.lastMoveMover = mover;
+
 			int legalBefore = static_cast<int>(state.board->legalMoves().size());
 			std::string beforeFen = state.board->getFen();
 			int fullMoveBefore = state.board->fullMoveNumber();
 			if (!state.board->makeMove(move))
 			{
 				state.capturedPiecesPendingRemoval.clear();
+				state.lastMoveWasCapture = false;
+				state.lastMoveDeliveredCheck = false;
 				return;
 			}
 			std::string afterFen = state.board->getFen();
@@ -307,7 +313,20 @@ namespace wchess
 
 			// Game over? (instant check, no evaluation needed)
 			if (state.board->isGameOver())
+			{
 				state.gameOver = true;
+				if (state.board->gameState() == GameState::Checkmate && !state.checkmateJingleTriggered)
+				{
+					state.checkmateJingleTriggered = true;
+					state.checkmateJingleTimer = 0.0f;
+					state.checkmateJingleStep = 0;
+				}
+				state.lastMoveDeliveredCheck = false;
+			}
+			else
+			{
+				state.lastMoveDeliveredCheck = state.board->inCheck();
+			}
 
 			// Queue the annotation on the worker thread (non-blocking).
 			if (state.annotator)
@@ -352,6 +371,12 @@ namespace wchess
 			state.animTo.clear();
 			state.animT.clear();
 			state.animDuration.clear();
+			state.lastMoveWasCapture = false;
+			state.lastMoveDeliveredCheck = false;
+			state.checkmateJingleTriggered = false;
+			state.checkmateJingleTimer = -1.0f;
+			state.checkmateJingleStep = 0;
+			services.audio().setFrictionSound(0.0f);
 
 			for (Entity captured : state.capturedPiecesPendingRemoval)
 			{

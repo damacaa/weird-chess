@@ -49,7 +49,15 @@ namespace wchess
 				publish(state, ann);
 
 				if (state.board && state.board->isGameOver())
+				{
 					state.gameOver = true;
+					if (state.board->gameState() == GameState::Checkmate && !state.checkmateJingleTriggered)
+					{
+						state.checkmateJingleTriggered = true;
+						state.checkmateJingleTimer = 0.0f;
+						state.checkmateJingleStep = 0;
+					}
+				}
 			}
 		}
 	} // namespace AnnotationSystem
