@@ -285,6 +285,27 @@ namespace wchess
 		state.disableAIToggle =
 			UIButtonFactory::createToggle(registry, services.shapes(), 0.0f, 0.0f, 18.0f, ChessPalette::ToggleCircle);
 
+		// ---- promotion modal UI (centered overlay when promoting) ----
+		state.promoCard = UIButtonFactory::createBoxLine(
+			registry, services.shapes(), -1000.0f, -1000.0f, 440.0f, 160.0f, 6.0f, ChessPalette::PanelText);
+
+		// Promotion shape buttons (Queen, Rook, Bishop, Knight - green like text)
+		state.promoQueenButton = UIButtonFactory::createPieceButton(
+			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::QUEEN], -1000.0f, -1000.0f, 50.0f,
+			ChessPalette::PanelText);
+
+		state.promoRookButton = UIButtonFactory::createPieceButton(
+			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::ROOK], -1000.0f, -1000.0f, 50.0f,
+			ChessPalette::PanelText);
+
+		state.promoBishopButton = UIButtonFactory::createPieceButton(
+			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::BISHOP], -1000.0f, -1000.0f, 50.0f,
+			ChessPalette::PanelText);
+
+		state.promoKnightButton = UIButtonFactory::createPieceButton(
+			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::KNIGHT], -1000.0f, -1000.0f, 50.0f,
+			ChessPalette::PanelText);
+
 		// ---- layout (positions everything) ----
 		state.lastResolutionHash = 0;
 		LayoutSystem::apply(state, registry, services);

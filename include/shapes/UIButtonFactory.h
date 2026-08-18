@@ -77,5 +77,33 @@ namespace wchess
 			toggle.modifierAmount = 4.0f;
 			return e;
 		}
+
+		// A clickable chess piece button: Piece SDF with hover highlight and click scaling.
+		inline Entity createPieceButton(Registry& registry, ShapeService& shapes, ShapeId shapeId, float x, float y,
+										float scale, uint16_t material)
+		{
+			Entity e = shapes.addUIShape({.shapeId = shapeId,
+										  .variables = {x, y, scale},
+										  .material = material,
+										  .combination = CombinationType::Addition,
+										  .group = 0});
+
+			auto& button = registry.addComponent<ShapeButton>(e);
+			button.clickPadding = 18.0f;
+			button.parameterModifierMask.set(2); // scale parameter modifier
+			button.modifierAmount = 4.0f;
+			return e;
+		}
+
+		// A rectangular box outline (used for cards / frames).
+		inline Entity createBoxLine(Registry& registry, ShapeService& shapes, float x, float y, float w, float h,
+									float thickness, uint16_t material)
+		{
+			return shapes.addUIShape({.shapeId = DefaultShapes::BOX_LINE,
+									  .variables = {x, y, w * 0.5f, h * 0.5f, thickness},
+									  .material = material,
+									  .combination = CombinationType::Addition,
+									  .group = 0});
+		}
 	} // namespace UIButtonFactory
 } // namespace wchess

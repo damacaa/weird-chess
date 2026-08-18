@@ -106,6 +106,11 @@ namespace wchess
 		float targetIntensity = 0.0f;						  // target intensity driving background shader
 		Entity newGameButton = INVALID_ENTITY;
 		Entity disableAIToggle = INVALID_ENTITY;
+		Entity promoCard = INVALID_ENTITY;
+		Entity promoQueenButton = INVALID_ENTITY;
+		Entity promoRookButton = INVALID_ENTITY;
+		Entity promoBishopButton = INVALID_ENTITY;
+		Entity promoKnightButton = INVALID_ENTITY;
 		Entity storyTitle = INVALID_ENTITY;
 		Entity storyStatus = INVALID_ENTITY;
 	};

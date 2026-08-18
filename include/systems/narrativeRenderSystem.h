@@ -177,6 +177,18 @@ namespace wchess
 				}
 			}
 
+			// ---- title header (alerts when promoting) ----
+			if (state.titleText != INVALID_ENTITY)
+			{
+				auto& text = registry.getComponent<UITextRenderer>(state.titleText);
+				std::string title = state.awaitingPromotion ? ">> CHOOSE PROMOTION PIECE <<" : "WEIRD CHESS";
+				if (text.text != title)
+				{
+					text.text = title;
+					registry.setComponentDirty(text);
+				}
+			}
+
 			// ---- status bar ----
 			if (state.statusText != INVALID_ENTITY)
 			{

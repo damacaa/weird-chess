@@ -107,7 +107,10 @@ namespace wchess
 				auto& t = registry.getComponent<Transform>(state.storyLines[i]);
 				t.position =
 					vec3(panelLeft,
-						 i < static_cast<size_t>(visible) ? storyTop - static_cast<float>(i) * pitch : -1000.0f, 0.0f);
+						 (!state.awaitingPromotion && i < static_cast<size_t>(visible))
+							 ? storyTop - static_cast<float>(i) * pitch
+							 : -1000.0f,
+						 0.0f);
 				registry.setComponentDirty(t);
 			}
 
@@ -130,6 +133,40 @@ namespace wchess
 				registry.setComponentDirty(shape);
 			}
 
+			// --- promotion modal (centered in the right panel when awaiting promotion) ---
+			const float panelCenterX = panelLeft + (width - 32.0f - panelLeft) * 0.5f;
+			const float promoSpacing = 100.0f;
+			const float promoStartX = panelCenterX - 1.5f * promoSpacing;
+			const float promoY = halfH;
+
+			if (state.promoCard != INVALID_ENTITY)
+			{
+				auto& shape = registry.getComponent<UIShape>(state.promoCard);
+				shape.parameters[0] = state.awaitingPromotion ? panelCenterX : -1000.0f;
+				shape.parameters[1] = state.awaitingPromotion ? halfH : -1000.0f;
+				registry.setComponentDirty(shape);
+			}
+
+			auto updatePromoSlot = [&](Entity btn, int index)
+			{
+				float posX =
+					state.awaitingPromotion ? promoStartX + static_cast<float>(index) * promoSpacing : -1000.0f;
+				float posY = state.awaitingPromotion ? promoY : -1000.0f;
+
+				if (btn != INVALID_ENTITY)
+				{
+					auto& shape = registry.getComponent<UIShape>(btn);
+					shape.parameters[0] = posX;
+					shape.parameters[1] = posY;
+					registry.setComponentDirty(shape);
+				}
+			};
+
+			updatePromoSlot(state.promoQueenButton, 0);
+			updatePromoSlot(state.promoRookButton, 1);
+			updatePromoSlot(state.promoBishopButton, 2);
+			updatePromoSlot(state.promoKnightButton, 3);
+
 			// --- move log (top-left, above the board) ---
 			if (state.moveLogText != INVALID_ENTITY)
 			{
@@ -138,7 +175,7 @@ namespace wchess
 				registry.setComponentDirty(t);
 			}
 
-			state.layoutDirty = true;
+			state.layoutDirty = false;
 			services.render().forceShaderRefresh2D();
 			services.render().forceShaderRefreshUI();
 		}
@@ -148,8 +185,10 @@ namespace wchess
 			ChessState& state = getState(registry);
 
 			int hash = (Display::width << 16) ^ Display::height;
-			if (state.lastResolutionHash != hash)
+			static bool s_lastPromo = false;
+			if (state.lastResolutionHash != hash || state.layoutDirty || s_lastPromo != state.awaitingPromotion)
 			{
+				s_lastPromo = state.awaitingPromotion;
 				state.lastResolutionHash = hash;
 				apply(state, registry, services);
 			}

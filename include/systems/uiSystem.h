@@ -11,25 +11,29 @@
 #include "globals.h"
 #include "systems/moveSystem.h"
 
-namespace wchess {
-namespace UISystem {
-inline void update(Registry &registry, ServiceProvider &services) {
-  ChessState &state = getState(registry);
-  if (!state.board)
-    return;
+namespace wchess
+{
+	namespace UISystem
+	{
+		inline void update(Registry& registry, ServiceProvider& services)
+		{
+			ChessState& state = getState(registry);
+			if (!state.board)
+				return;
 
-  // New game.
-  if (state.newGameButton != INVALID_ENTITY &&
-      registry.getComponent<ShapeButton>(state.newGameButton).state ==
-          ButtonState::Down) {
-    MoveSystem::resetGame(state, registry, services);
-  }
+			// New game.
+			if (state.newGameButton != INVALID_ENTITY &&
+				registry.getComponent<ShapeButton>(state.newGameButton).state == ButtonState::Down)
+			{
+				MoveSystem::resetGame(state, registry, services);
+			}
 
-  // Disable AI toggle: when active, human controls both players' pieces.
-  if (state.disableAIToggle != INVALID_ENTITY) {
-    auto &toggle = registry.getComponent<ShapeToggle>(state.disableAIToggle);
-    state.disableAI = toggle.active;
-  }
-}
-} // namespace UISystem
+			// Disable AI toggle: when active, human controls both players' pieces.
+			if (state.disableAIToggle != INVALID_ENTITY)
+			{
+				auto& toggle = registry.getComponent<ShapeToggle>(state.disableAIToggle);
+				state.disableAI = toggle.active;
+			}
+		}
+	} // namespace UISystem
 } // namespace wchess
