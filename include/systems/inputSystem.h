@@ -45,16 +45,6 @@ namespace wchess
 			bool mouseClicked = services.input().getMouseButtonDown(Input::LeftClick);
 			bool isUI = services.input().isUIClick();
 
-			if (mouseClicked)
-			{
-				int sq = squareAtMouse(registry, services);
-				Logger::log("[Input] Mouse Click at (" + std::to_string(mouseX) + ", " + std::to_string(mouseY) +
-							") isUIClick=" + (isUI ? "true" : "false") + " square=" + std::to_string(sq) + " (" +
-							(sq >= 0 ? Square::fromIndex(sq).algebraic() : "none") +
-							") selectedSq=" + std::to_string(state.selectedSquare) +
-							" awaitingPromo=" + (state.awaitingPromotion ? "true" : "false"));
-			}
-
 			// ---- promotion selection (shape buttons + board square click + keyboard fallback) ----
 			if (state.awaitingPromotion)
 			{
@@ -71,10 +61,10 @@ namespace wchess
 
 				auto checkSlot = [&](Entity btn, int index, PieceType type, const char* name)
 				{
+					(void)name;
 					if (btn != INVALID_ENTITY &&
 						registry.getComponent<ShapeButton>(btn).state == ButtonState::Down)
 					{
-						Logger::log(std::string("[Input][Promo] ShapeButton clicked: ") + name);
 						chosen = type;
 						pick = true;
 						return;
@@ -84,8 +74,6 @@ namespace wchess
 						float slotX = promoStartX + static_cast<float>(index) * promoSpacing;
 						if (std::abs(mouseX - slotX) < 45.0f && std::abs(mouseY - promoY) < 55.0f)
 						{
-							Logger::log(std::string("[Input][Promo] Slot bounds clicked for: ") + name + " (slotX=" +
-										std::to_string(slotX) + ")");
 							chosen = type;
 							pick = true;
 						}
@@ -100,31 +88,26 @@ namespace wchess
 				// Keyboard fallback
 				if (services.input().getKeyDown(Input::Q) || services.input().getKeyDown(Input::Num1))
 				{
-					Logger::log("[Input][Promo] Key pressed: Queen");
 					chosen = PieceType::Queen;
 					pick = true;
 				}
 				else if (services.input().getKeyDown(Input::R) || services.input().getKeyDown(Input::Num2))
 				{
-					Logger::log("[Input][Promo] Key pressed: Rook");
 					chosen = PieceType::Rook;
 					pick = true;
 				}
 				else if (services.input().getKeyDown(Input::B) || services.input().getKeyDown(Input::Num3))
 				{
-					Logger::log("[Input][Promo] Key pressed: Bishop");
 					chosen = PieceType::Bishop;
 					pick = true;
 				}
 				else if (services.input().getKeyDown(Input::N) || services.input().getKeyDown(Input::Num4))
 				{
-					Logger::log("[Input][Promo] Key pressed: Knight");
 					chosen = PieceType::Knight;
 					pick = true;
 				}
 				else if (services.input().getKeyDown(Input::Esc))
 				{
-					Logger::log("[Input][Promo] Esc pressed: Cancelling promotion");
 					state.awaitingPromotion = false;
 					state.promoFrom = -1;
 					state.promoTo = -1;
@@ -137,9 +120,6 @@ namespace wchess
 
 				if (pick)
 				{
-					Logger::log("[Input][Promo] Executing promotion move to piece " +
-								std::to_string(static_cast<int>(chosen)) + " from " +
-								std::to_string(state.promoFrom) + " to " + std::to_string(state.promoTo));
 					Move move;
 					move.from = Square::fromIndex(state.promoFrom);
 					move.to = Square::fromIndex(state.promoTo);
@@ -159,13 +139,6 @@ namespace wchess
 			// ---- only interactive if it's the active player's turn ----
 			if (state.aiThinking || (!state.disableAI && currentTurn != humanColor))
 			{
-				if (mouseClicked)
-				{
-					Logger::log("[Input] Click ignored: Not player turn or AI thinking (aiThinking=" +
-								std::string(state.aiThinking ? "true" : "false") +
-								", currentTurn=" + (currentTurn == Color::White ? "White" : "Black") +
-								", humanColor=" + (humanColor == Color::White ? "White" : "Black") + ")");
-				}
 				return;
 			}
 
@@ -189,14 +162,12 @@ namespace wchess
 				// promote to queen when a pawn reaches the last rank
 				if (pick.isPromotion)
 					pick.promotion = PieceType::Queen;
-				Logger::log("[autoplay] " + ChessLibBoard::toUci(pick));
 				MoveSystem::applyMove(state, registry, services, pick, activeColor);
 				return;
 			}
 
 			if (services.input().getKeyDown(Input::Esc))
 			{
-				Logger::log("[Input] Esc pressed: Deselecting");
 				state.selectedSquare = -1;
 				state.legalTargets.clear();
 				MoveSystem::refreshHighlights(state, registry, services);
@@ -208,14 +179,12 @@ namespace wchess
 
 			if (isUI)
 			{
-				Logger::log("[Input] Click consumed by UI layer (isUIClick == true)");
 				return;
 			}
 
 			int square = squareAtMouse(registry, services);
 			if (square < 0)
 			{
-				Logger::log("[Input] Clicked outside board bounds");
 				return;
 			}
 
@@ -243,15 +212,10 @@ namespace wchess
 						targetSquare = rank * 8 + 2;
 				}
 
-				bool isTargetMatch = false;
 				for (int target : state.legalTargets)
 				{
 					if (target == targetSquare)
 					{
-						isTargetMatch = true;
-						Logger::log("[Input] Clicked legal target square: " + std::to_string(targetSquare) + " (" +
-									Square::fromIndex(targetSquare).algebraic() + ")");
-
 						// Find the matching legal move to preserve all flags (castling, en
 						// passant, promotion)
 						Move move;
@@ -275,16 +239,9 @@ namespace wchess
 						// picks a piece via promotion shape buttons.
 						auto movingPiece = state.board->pieceAt(move.from);
 						int promoRank = activeColor == Color::White ? 7 : 0;
-						Logger::log("[Input] Move: from=" + move.from.algebraic() + " to=" + move.to.algebraic() +
-									" promoRank=" + std::to_string(promoRank) +
-									" move.to.rank=" + std::to_string(move.to.rank) + " pieceType=" +
-									(movingPiece ? std::to_string(static_cast<int>(movingPiece->second)) : "-1") +
-									" isPromotionFlag=" + (move.isPromotion ? "true" : "false"));
 
 						if (move.to.rank == promoRank && movingPiece && movingPiece->second == PieceType::Pawn)
 						{
-							Logger::log("[Input] -> TRIGGERING PROMOTION MODAL! from=" +
-										std::to_string(state.selectedSquare) + " to=" + std::to_string(targetSquare));
 							state.awaitingPromotion = true;
 							state.promoFrom = state.selectedSquare;
 							state.promoTo = targetSquare;
@@ -298,28 +255,15 @@ namespace wchess
 						return;
 					}
 				}
-
-				if (!isTargetMatch)
-				{
-					Logger::log("[Input] Square " + std::to_string(targetSquare) + " (" +
-								Square::fromIndex(targetSquare).algebraic() +
-								") is not in legalTargets (count=" + std::to_string(state.legalTargets.size()) + ")");
-				}
 			}
 
 			// Clicking a piece of the active color (re)selects it.
 			if (piece && piece->first == activeColor)
 			{
-				Logger::log("[Input] (Re)selecting piece at " + std::to_string(square) + " (" +
-							Square::fromIndex(square).algebraic() +
-							") color=" + (piece->first == Color::White ? "White" : "Black") +
-							" type=" + std::to_string(static_cast<int>(piece->second)));
 				state.selectedSquare = square;
 				state.legalTargets.clear();
 				for (const auto& m : state.board->legalMovesFrom(Square::fromIndex(square)))
 				{
-					Logger::log("[Input]   Legal move: " + m.from.algebraic() + " -> " + m.to.algebraic() +
-								" (isPromo=" + (m.isPromotion ? "true" : "false") + ")");
 					state.legalTargets.push_back(m.to.index());
 				}
 				MoveSystem::refreshHighlights(state, registry, services);
@@ -327,7 +271,6 @@ namespace wchess
 			}
 
 			// Empty click on an empty/foreign square: deselect.
-			Logger::log("[Input] Clicked non-piece/non-target square: Deselecting");
 			state.selectedSquare = -1;
 			state.legalTargets.clear();
 			MoveSystem::refreshHighlights(state, registry, services);

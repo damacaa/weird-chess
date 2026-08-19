@@ -40,7 +40,9 @@ namespace ChessConfig
 	inline constexpr float PANEL_RIGHT_MARGIN_PX = 24.0f;
 	inline constexpr float PANEL_TOP_MARGIN_PX = 56.0f;
 	inline constexpr int STORY_MAX_LINES = 64;
-	inline constexpr std::string_view STORY_INTRO_PLACEHOLDER = "The game begins.";
+	inline constexpr int STORY_MAX_HISTORY_BEATS = 6;	 // max recent story paragraphs in rolling context window
+	inline constexpr int STORY_MAX_CONTEXT_TOKENS = 768; // max token budget for story context prompt
+	inline constexpr std::string_view STORY_INTRO_PLACEHOLDER = "The conflict begins.";
 
 	// Typewriter text pacing (characters per second)
 	// Slows down text rendering with a minimum speed floor so AI text updates smoothly char by char
@@ -92,6 +94,8 @@ namespace ChessConfig
 	struct GameSettings
 	{
 		std::string modelName = "tinyllama-15M-stories-Q2_K.gguf";
+		std::string premise = ""; // custom starting premise; empty = auto-generate random premise
+		int64_t seed = -1;        // -1 = random seed, >= 0 = forced deterministic seed
 		std::string difficulty = "easy";
 		int skillLevel = DEFAULT_SKILL; // 0
 		int elo = DEFAULT_ELO;          // 1320
@@ -155,6 +159,33 @@ namespace ChessConfig
 			else if (j.contains("model_name") && j["model_name"].is_string())
 			{
 				settings.modelName = j["model_name"].get<std::string>();
+			}
+
+			// Story Premise configuration
+			if (j.contains("story") && j["story"].is_object() && j["story"].contains("premise") &&
+				j["story"]["premise"].is_string())
+			{
+				settings.premise = j["story"]["premise"].get<std::string>();
+			}
+			else if (j.contains("premise") && j["premise"].is_string())
+			{
+				settings.premise = j["premise"].get<std::string>();
+			}
+
+			// Story seed configuration (supports "seed" in "story", "model", or root)
+			if (j.contains("story") && j["story"].is_object() && j["story"].contains("seed") &&
+				j["story"]["seed"].is_number_integer())
+			{
+				settings.seed = j["story"]["seed"].get<int64_t>();
+			}
+			else if (j.contains("model") && j["model"].is_object() && j["model"].contains("seed") &&
+					 j["model"]["seed"].is_number_integer())
+			{
+				settings.seed = j["model"]["seed"].get<int64_t>();
+			}
+			else if (j.contains("seed") && j["seed"].is_number_integer())
+			{
+				settings.seed = j["seed"].get<int64_t>();
 			}
 
 			// Typewriter speed configuration

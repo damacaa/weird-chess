@@ -549,7 +549,7 @@ static void testTextWrapping()
 	// 4. Message spacing: wrapped lines of the same message stay adjacent,
 	// while different messages have an extra blank line between them.
 	std::vector<std::string> chunks = {"White (1) - Good e4 (+0.20)", "Black (1) - Best e5 (0.00)"};
-	auto storyLines = NarrativeRenderSystem::formatStoryLines(chunks, 14);
+	auto storyLines = NarrativeRenderSystem::formatStoryLines(chunks, 12);
 	// Message 1 wraps into 3 lines, then 1 blank line separator, then Message 2 wraps into 3 lines
 	CHECK(storyLines.size() == 7);
 	CHECK(storyLines[0] == "White (1) -");
@@ -647,6 +647,56 @@ static void testGameIntensity()
 	printf("game intensity checks passed\n");
 }
 
+static void testNarratorContext()
+{
+	printf("---- testing Narrator context & premise ----\n");
+
+	// 1. PassThroughNarrator custom premise and history
+	{
+		PassThroughNarrator narrator;
+		narrator.setPremise("Two rival space captains met in orbit.");
+		CHECK(narrator.getPremise() == "Two rival space captains met in orbit.");
+
+		StoryStream stream;
+		narrator.narrateIntro(stream);
+		auto history = narrator.getStoryHistory();
+		CHECK(history.size() == 1);
+		CHECK(history[0] == "Two rival space captains met in orbit.");
+
+		narrator.reset();
+		CHECK(narrator.getStoryHistory().empty());
+	}
+
+	// 2. LlamaNarrator premise, memory, and sanitization
+	{
+		LlamaNarrator llama;
+		llama.setPremise("Commander Rowan and Warlord Vane clashed across the valley.");
+		CHECK(llama.getPremise() == "Commander Rowan and Warlord Vane clashed across the valley.");
+
+		StoryStream stream;
+		llama.narrateIntro(stream);
+		auto history = llama.getStoryHistory();
+		CHECK(!history.empty());
+		CHECK(history[0].find("Commander Rowan") != std::string::npos);
+
+		llama.reset();
+		CHECK(llama.getStoryHistory().empty());
+	}
+
+	// 3. Font sanitization checks (smart quotes, apostrophes, dashes, hashes)
+	{
+		std::string messy = "Story: It's Rowan's “secret” plan—an ambush… #1!";
+		std::string cleaned = LlamaNarrator::sanitizeForEngine(messy);
+		CHECK(cleaned.find('#') == std::string::npos);
+		CHECK(cleaned.find('\'') == std::string::npos);
+		CHECK(cleaned.find("Story:") == std::string::npos);
+		CHECK(cleaned.find("\"secret\"") != std::string::npos);
+		CHECK(cleaned.find("-") != std::string::npos);
+	}
+
+	printf("narrator context checks passed\n");
+}
+
 int main(int argc, char** argv)
 {
 	testMinimaxAI();
@@ -657,6 +707,7 @@ int main(int argc, char** argv)
 	testMoveClassificationAndTrades();
 	testTextWrapping();
 	testGameIntensity();
+	testNarratorContext();
 
 	ChessState state;
 	state.board = std::make_shared<ChessLibBoard>();

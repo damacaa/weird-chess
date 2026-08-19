@@ -352,6 +352,20 @@ namespace wchess
 		// Full reset: back to the starting position, empty panel and log.
 		inline void resetGame(ChessState& state, Registry& registry, ServiceProvider& services)
 		{
+			// Re-read config.json dynamically on reset (for updated premise, seed, etc.)
+			ChessConfig::GameSettings gameSettings = ChessConfig::loadGameSettings();
+			state.typewriterSpeed = gameSettings.typewriterSpeed;
+
+			if (state.narratorImpl)
+			{
+				state.narratorImpl->setSeed(gameSettings.seed);
+				state.narratorImpl->setPremise(gameSettings.premise);
+			}
+
+			WeirdEngine::Logger::log("[WeirdChess] Resetting match. Config reloaded: seed=" +
+									 (gameSettings.seed >= 0 ? std::to_string(gameSettings.seed) : "random") +
+									 ", premise=" + (gameSettings.premise.empty() ? "(ai-generated)" : "'" + gameSettings.premise + "'"));
+
 			state.board->loadStartPosition();
 			state.selectedSquare = -1;
 			state.legalTargets.clear();

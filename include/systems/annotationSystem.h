@@ -18,8 +18,6 @@ namespace wchess
 		// Pushes the annotation into the narrator queue and the move log.
 		inline void publish(ChessState& state, const MoveAnnotation& ann)
 		{
-			Logger::log("[Story Input] " + AnnotationWriter::formatLLMEvent(ann));
-
 			if (state.narrator)
 				state.narrator->push(ann);
 

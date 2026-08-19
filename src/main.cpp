@@ -27,7 +27,7 @@ int main(int argc, char* argv[])
 	physicsSettings.gravity = 0.0f;
 
 	AudioSettings audioSettings{};
-	audioSettings.mute = false;
+	audioSettings.mute = true;
 	audioSettings.enableAmbient = false;
 
 	SceneManager& sceneManager = SceneManager::getInstance();

@@ -3,6 +3,11 @@
     "name": "tinyllama-15M-stories-Q2_K.gguf",
     "description": "Model filename inside assets/model/ (or leave empty to auto-detect any .gguf)"
   },
+  "story": {
+    "premise": "",
+    "seed": -1,
+    "description": "Story settings: premise (custom starting scenario), seed (-1 for random seed, or integer >= 0 for deterministic output)."
+  },
   "typewriter_speed": 18.0,
   "enemy": {
     "difficulty": "easy",

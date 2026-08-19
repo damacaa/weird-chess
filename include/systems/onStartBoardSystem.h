@@ -36,6 +36,7 @@ namespace wchess
 								 "' (skill=" + std::to_string(gameSettings.skillLevel) +
 								 ", elo=" + std::to_string(gameSettings.elo) +
 								 "), model='" + gameSettings.modelName + "'" +
+								 ", seed=" + (gameSettings.seed >= 0 ? std::to_string(gameSettings.seed) : "random") +
 								 ", typewriter_speed=" + std::to_string(gameSettings.typewriterSpeed) + ")");
 
 		// Stockfish if available, otherwise our in-process MinimaxAI.
@@ -156,6 +157,10 @@ namespace wchess
 		}
 
 		auto llama = std::make_shared<LlamaNarrator>();
+		if (gameSettings.seed >= 0)
+		{
+			llama->setSeed(gameSettings.seed);
+		}
 		if (!modelPath.empty() && llama->load(modelPath))
 		{
 			state.narratorImpl = llama;
@@ -164,6 +169,15 @@ namespace wchess
 		{
 			WeirdEngine::Logger::log("[WeirdChess] Falling back to engine move annotation narrator.");
 			state.narratorImpl = std::make_shared<PassThroughNarrator>();
+		}
+
+		if (gameSettings.seed >= 0)
+		{
+			state.narratorImpl->setSeed(gameSettings.seed);
+		}
+		if (!gameSettings.premise.empty())
+		{
+			state.narratorImpl->setPremise(gameSettings.premise);
 		}
 
 		state.narrator = std::make_shared<NarratorThread>(state.narratorImpl);

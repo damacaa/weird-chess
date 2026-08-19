@@ -27,9 +27,41 @@ namespace wchess
 			return "passthrough";
 		}
 
+		void setPremise(const std::string& premise) override
+		{
+			m_premise = premise;
+		}
+
+		std::string getPremise() const override
+		{
+			return m_premise;
+		}
+
+		void setSeed(int64_t seed) override
+		{
+			m_seed = seed;
+		}
+
+		int64_t getSeed() const override
+		{
+			return m_seed;
+		}
+
+		std::vector<std::string> getStoryHistory() const override
+		{
+			return m_history;
+		}
+
+		void reset() override
+		{
+			m_history.clear();
+		}
+
 		void narrateIntro(StoryStream& out) override
 		{
-			out.append(std::string(ChessConfig::STORY_INTRO_PLACEHOLDER));
+			std::string intro = m_premise.empty() ? std::string(ChessConfig::STORY_INTRO_PLACEHOLDER) : m_premise;
+			m_history.push_back(intro);
+			out.append(intro);
 			out.setStatus(StoryStatus::Idle);
 		}
 
@@ -77,5 +109,10 @@ namespace wchess
 				out.setStatus(StoryStatus::Generating);
 			}
 		}
+
+	private:
+		std::string m_premise;
+		int64_t m_seed = -1;
+		std::vector<std::string> m_history;
 	};
 } // namespace wchess

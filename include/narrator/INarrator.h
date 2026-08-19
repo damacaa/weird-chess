@@ -26,5 +26,11 @@ namespace wchess
 
 		virtual void cancel() {}
 		virtual void reset() {}
+
+		virtual void setPremise(const std::string& premise) {}
+		virtual std::string getPremise() const { return ""; }
+		virtual void setSeed(int64_t seed) {}
+		virtual int64_t getSeed() const { return -1; }
+		virtual std::vector<std::string> getStoryHistory() const { return {}; }
 	};
 } // namespace wchess
