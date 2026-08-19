@@ -42,10 +42,10 @@ Implemented by:
 ### Adding your own engine
 
 1. Create `include/chess/MyEngineAI.h` implementing `wchess::IChessAI`.
-2. Construct it in `systems/onStartBoardSystem.h` where `state.ai` is set
+2. Construct it in `include/systems/onStartBoardSystem.h` where `state.ai` is set
    (currently: try Stockfish, fall back to MinimaxAI).
-3. The annotation pipeline (`systems/annotationSystem.h`) and the AI system
-   (`systems/aiSystem.h`) need no changes - they only see `IChessAI`.
+3. The annotation pipeline (`include/systems/annotationSystem.h`) and the AI system
+   (`include/systems/aiSystem.h`) need no changes - they only see `IChessAI`.
 
 ### Stockfish placement
 
@@ -60,8 +60,6 @@ and put the executable at `bin/stockfish`. The binary is gitignored.
 
 ### Threading notes
 
-- `bestMove`/`evaluate` are blocking calls on the main thread (about
-  200-600 ms each; annotation evals are 2x 300 ms per move). Fine for stage 1.
-- If this becomes a problem: run the evals on a worker thread and gate the
-  input system on a "annotation pending" flag. The narrator thread already
-  demonstrates the pattern to copy.
+- Move evaluations for centipawn loss and annotations are performed asynchronously on the `AsyncAnnotator` worker thread (`include/chess/AsyncAnnotator.h`). This ensures move animations start immediately on frame 0 without stalling the render loop.
+- `IChessAI::evaluate()` must be thread-safe or only invoked by the `AsyncAnnotator` worker while an evaluation job is in flight.
+- The AI turn (`AISystem::update`) and user move inputs are gated until both the animation and background annotation have completed (`!state.moveAppliedPendingAnnotation && state.animatingPieces.empty()`).

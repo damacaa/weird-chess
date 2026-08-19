@@ -5,25 +5,25 @@ An experimental chess game built on **[weird-engine](https://github.com/damacaa/
 ![Weird Chess Screenshot](docs/assets/screenshot.png)
 
 **Weird Chess** pairs a full chess game with an evolving narrative panel:
-- **Left Panel:** The interactive chessboard, smooth SDF piece rendering, animations, legal move indicators, and game control UI.
-- **Right Panel:** A real-time story and analysis stream. Every move is evaluated and classified in real time (chess.com-style: *Best*, *Great*, *Excellent*, *Good*, *Inaccuracy*, *Mistake*, *Miss*, *Blunder*, with tactical alerts for *Forks*, *Pins*, *Skewers*, *Checks*, and *Mates*).
+- **Left Panel:** The interactive chessboard, smooth SDF piece rendering, move animations, legal move indicators, promotion modal, and game controls.
+- **Right Panel:** A real-time story stream powered by an embedded local LLM (`llama.cpp`), dynamically turning tactical swings, captures, and blunders into an unfolding serialized drama (with automatic fallback to technical move annotations if no model is loaded).
 
 ```
 +-----------------------------------------+-----------------------------------------+
 |                                         |  WEIRD CHESS                            |
-|                                         |  White (12) - FORK Nf7+                 |
-|                                         |  White forks the king and the rook      |
-|   8  [r] [.] [b] [q] [k] [b] [.] [r]    |  Eval: +0.46 -> +2.85                   |
-|   7  [p] [p] [p] [.] [.] [N] [p] [p]    |                                         |
-|   6  [.] [.] [.] [.] [.] [.] [.] [.]    |  "The cavalry struck across the         |
-|   5  [.] [.] [.] [p] [.] [.] [.] [.]    |  frontier, cutting the commander's      |
-|   4  [.] [.] [.] [P] [.] [.] [.] [.]    |  escape line in two..."                 |
+|                                         |                                         |
+|                                         |  "What are you playing? What are        |
+|   8  [r] [.] [b] [q] [k] [b] [.] [r]    |   you chewing?"                         |
+|   7  [p] [p] [p] [.] [.] [p] [p] [p]    |                                         |
+|   6  [.] [.] [.] [.] [.] [.] [.] [.]    |  Rowan stepped forward to claim open    |
+|   5  [.] [.] [.] [p] [.] [.] [.] [.]    |  ground. Vane advanced their frontline |
+|   4  [.] [.] [.] [P] [.] [.] [.] [.]    |  presence.                              |
 |   3  [.] [.] [N] [.] [.] [.] [.] [.]    |                                         |
 |   2  [P] [P] [P] [.] [P] [P] [P] [P]    |                                         |
 |   1  [R] [.] [B] [Q] [K] [B] [.] [R]    |                                         |
 |       a   b   c   d   e   f   g   h     |                                         |
 |                                         |                                         |
-|                                         | [NEW GAME] [STRONG AI]                  |
+|                                         |                                  [■] [○]|
 +-----------------------------------------+-----------------------------------------+
 ```
 
@@ -39,11 +39,11 @@ An experimental chess game built on **[weird-engine](https://github.com/damacaa/
 - [Building and Running](#building-and-running)
   - [Prerequisites](#prerequisites)
   - [Build Steps](#build-steps)
-  - [Stockfish Engine Setup](#stockfish-engine-setup)
+  - [Stockfish Engine Setup (Optional)](#stockfish-engine-setup-optional)
 - [Controls](#controls)
-- [Configuration & Strength Tuning](#configuration--strength-tuning)
+- [Configuration & Difficulty Tuning](#configuration--difficulty-tuning)
+- [Local LLM Story Narrator](#local-llm-story-narrator)
 - [Automated Tests & Debugging](#automated-tests--debugging)
-- [Roadmap (Stage 2: Local LLM)](#roadmap-stage-2-local-llm)
 - [Licenses](#licenses)
 
 ---
@@ -51,11 +51,13 @@ An experimental chess game built on **[weird-engine](https://github.com/damacaa/
 ## Features
 
 - **2D SDF Ray-Marched Graphics:** Board squares, pieces, highlights, and buttons are defined as Signed Distance Fields and ray-marched with crisp vector-like edges and procedural materials.
-- **Asynchronous Move Classification:** Fast centipawn loss and tactical analysis without stalling the animation or render loop.
+- **Embedded Local LLM Narrator:** Uses `llama.cpp` to narrate matches as serialized fiction in real time. Chess moves and tactical events drive character actions, rivalries, and dramatic tension without explicitly mentioning chess pieces.
+- **Asynchronous Move Classification:** Fast centipawn loss and tactical analysis performed on a background worker thread without stalling piece animations or the render loop.
 - **Tactic Detection Engine:** Real-time bitboard analysis detecting forks, absolute & relative pins, skewers, discovered attacks, checks, and mates.
-- **Built-in In-Process Engine (`MinimaxAI`):** High-performance C++20 Alpha-Beta search with PeSTO tapered piece-square evaluation and Quiescence search. Runs 100% in-process out of the box and compiles directly to WebAssembly for web builds (e.g. itch.io).
-- **Optional Stockfish UCI Support:** Subprocess adapter for Stockfish with humanized Elo tuning (shallow search depth, dynamic blunders, Elo limits) and tournament master strength toggle.
+- **Built-in In-Process Engine (`MinimaxAI`):** High-performance C++20 Alpha-Beta search with PeSTO tapered piece-square evaluation and Quiescence search. Runs 100% in-process out of the box and compiles directly to WebAssembly for web builds.
+- **Optional Stockfish UCI Support:** Subprocess adapter for Stockfish with humanized Elo tuning (shallow search depth, dynamic blunders, Elo limits).
 - **Responsive Layout System:** Dynamic resolution tracking and auto-reframing for arbitrary window sizes.
+- **Typewriter Text Pacing:** Smooth character-by-character text reveal with dynamic catch-up acceleration.
 - **Modular ECS Architecture:** Thin scene dispatcher registering decoupled, single-responsibility systems.
 
 ---
@@ -96,11 +98,13 @@ Weird Chess is built around clean boundaries and an Entity-Component-System (ECS
    Encapsulates move generation, legality validation, FEN parsing, check/mate/draw rules, and move history.
 2. **AI & Analysis (`IChessAI`)**  
    Defines the contract for bot moves and position evaluations (`evaluate`, `bestMove`, `setStrength`, `setPosition`).
-   - `MinimaxAI`: High-performance in-process Alpha-Beta engine with PeSTO piece-square evaluation and quiescence search (default for web and offline native builds; 100% MIT).
+   - `MinimaxAI`: High-performance in-process Alpha-Beta engine with PeSTO piece-square evaluation and quiescence search (default built-in engine; 100% MIT).
    - `StockfishUCIAI`: Communicates with a local Stockfish binary over standard UCI via non-blocking pipes (`SDL_CreateProcess`).
    - `NullAI`: Minimal fallback for testing without search logic.
 3. **Narrator Pipeline (`INarrator` & `NarratorThread`)**  
-   Worker thread receiving completed `MoveAnnotation`s and streaming generated story lines into a thread-safe `StoryStream`.
+   Worker thread receiving completed `MoveAnnotation`s and streaming generated text into a thread-safe `StoryStream`.
+   - `LlamaNarrator`: Runs local GGUF inference via `llama.cpp` to write contextual narrative prose.
+   - `PassThroughNarrator`: Verbatim fallback narrator outputting chess analysis titles, eval changes, and tactical alerts.
 
 ---
 
@@ -111,13 +115,14 @@ The project is designed to be lightweight, modular, and easy to build:
 | Library / Tool | Source | Integration Method | License | Purpose |
 |---|---|---|---|---|
 | **[weird-engine](https://github.com/damacaa/weird-engine)** | Sibling dir or GitHub | Local `add_subdirectory` or `FetchContent` | Project License | 2D SDF Raymarching engine, ECS, windowing, audio, and UI |
+| **[llama.cpp](https://github.com/ggml-org/llama.cpp)** | GitHub | CMake `FetchContent` (b4500) | MIT | Embedded local LLM inference for the real-time story narrator |
 | **[SDL3](https://github.com/libsdl-org/SDL)** | Engine dependency | Built via weird-engine | zlib | Window creation, input handling, non-blocking subprocess I/O |
 | **[Dear ImGui](https://github.com/ocornut/imgui)** | Engine dependency | Built via weird-engine | MIT | Debug overlay (FEN, turn counter, engine status, last eval) |
 | **[chess-library](https://github.com/Disservin/chess-library)** | `third_party/chess/` | Vendored header (`chess.hpp`) | MIT | High-performance C++20 bitboard chess move generation and rules |
 | **`MinimaxAI`** | `include/chess/MinimaxAI.h` | Built-in in-process C++20 engine | MIT | Default out-of-the-box engine, runs natively on WebAssembly / Desktop |
 | **[Stockfish](https://stockfishchess.org/)** *(optional)* | External binary | Subprocess execution via UCI pipes | GPLv3 | Optional high-tier engine for deep desktop analysis |
 
-> **Note on Licensing:** `MinimaxAI` is 100% MIT. Stockfish is **not** linked into the WeirdChess binary; it runs as an independent external subprocess via standard UCI pipes, ensuring the WeirdChess codebase remains under the permissive MIT license.
+> **Note on Licensing:** `MinimaxAI` and `llama.cpp` are 100% MIT. Stockfish is **not** linked into the WeirdChess binary; it runs as an independent external subprocess via standard UCI pipes, ensuring the WeirdChess codebase remains under the permissive MIT license.
 
 ---
 
@@ -133,7 +138,7 @@ User selects square
 MoveSystem::applyMove()
   ├─ Update board state
   ├─ Start piece animation (0.18s)
-  └─ Push job ───────────────▶ StockfishUCIAI::evaluate()
+  └─ Push job ───────────────▶ IChessAI::evaluate()
         │                              │
         │                       TacticDetector::analyze()
         │                              │
@@ -151,7 +156,7 @@ AISystem::update()
 
 1. **Player Click:** The move is immediately validated and applied to the board. The visual animation starts on frame 0.
 2. **Background Annotation:** `AsyncAnnotator` evaluates position differentials in centipawns and classifies the move without stalling the render thread.
-3. **Story Streaming:** Once annotated, the worker thread generates narrative commentary and streams it to the screen-space story panel.
+3. **Story Streaming:** Once annotated, the `NarratorThread` worker generates narrative commentary and streams it to the screen-space story panel.
 4. **AI Reply:** The AI turn begins once both the player's piece animation and annotation have concluded.
 
 ---
@@ -161,14 +166,17 @@ AISystem::update()
 ```
 weird-chess/
 ├── AGENTS.md                  # Instructions and conventions for AI assistants
-├── CMakeLists.txt             # Project build configuration
+├── CMakeLists.txt             # Project build configuration (links weird-engine & llama.cpp)
 ├── LICENSE                    # MIT License
 ├── README.md                  # Project documentation
 ├── assets/                    # Game assets (scenes, fonts, textures)
+│   ├── config.json            # Game, difficulty, and LLM configuration
+│   └── model/                 # Bundled GGUF models (e.g. tinyllama-15M-stories-Q2_K.gguf)
 ├── bin/                       # Local binaries (e.g., bin/stockfish - gitignored)
 ├── docs/                      # Technical documentation
 │   ├── adapters.md            # Guide on writing custom IChessAI engine adapters
-│   └── strength.md            # Stockfish Elo and humanized tuning documentation
+│   ├── assets/                # Documentation media (screenshot.png)
+│   └── strength.md            # Opponent strength and humanized tuning documentation
 ├── include/
 │   ├── chess/                 # Chess rules, evaluation, UCI adapters, tactic detectors
 │   │   ├── AnnotationWriter.h # Human-readable text generator
@@ -176,6 +184,7 @@ weird-chess/
 │   │   ├── ChessLibBoard.h    # Canonical chess.hpp wrapper
 │   │   ├── ChessTypes.h       # Move, Eval, MoveQuality, TacticInfo types
 │   │   ├── IChessAI.h         # Abstract AI adapter interface
+│   │   ├── MinimaxAI.h        # In-process Alpha-Beta search engine
 │   │   ├── MoveClassifier.h   # Centipawn delta classifier
 │   │   ├── NullAI.h           # Fallback offline AI
 │   │   ├── StockfishUCIAI.h   # Stockfish UCI process controller
@@ -185,13 +194,14 @@ weird-chess/
 │   ├── globals.h              # Engine global definitions
 │   ├── narrator/              # Story narration interfaces & worker thread
 │   │   ├── INarrator.h        # Narrator interface
+│   │   ├── LlamaNarrator.h    # llama.cpp GGUF narrative story generator
 │   │   ├── NarratorThread.h   # Thread-safe worker thread & queue
 │   │   ├── PassThroughNarrator.h # Stage 1 verbatim annotation narrator
 │   │   ├── StoryStream.h      # Thread-safe string stream buffer
-│   │   └── llamacpp-integration.md # Stage 2 local LLM design doc
+│   │   └── llamacpp-integration.md # Narrator design and architecture documentation
 │   ├── scenes/                # Scene definitions (ChessScene)
 │   ├── shapes/                # Piece & Board SDF shape builders, UI Button factory
-│   └── systems/               # ECS Systems (input, move, animation, layout, AI, etc.)
+│   └── systems/               # ECS Systems (input, move, animation, layout, AI, narrator, etc.)
 ├── src/
 │   ├── chess/
 │   │   └── StockfishUCIAI.cpp # Non-blocking SDL3 process UCI implementation
@@ -225,11 +235,11 @@ cmake --build build -j
 ./build/WeirdChess
 ```
 
-### Stockfish Engine Setup
+### Stockfish Engine Setup (Optional)
 
-While the game includes a built-in `NullAI` fallback, Stockfish provides full-strength evaluation and move classification:
+The game includes the built-in `MinimaxAI` engine out of the box. If you wish to use Stockfish for grandmaster-level evaluation:
 
-1. Download the latest Stockfish binary for your OS from [official-stockfish/Stockfish Releases](https://github.com/official-stockfish/Stockfish/releases).
+1. Download a Stockfish binary for your OS from [official-stockfish/Stockfish Releases](https://github.com/official-stockfish/Stockfish/releases).
 2. Place the executable at `bin/stockfish` (or specify an arbitrary path using the environment variable):
    ```bash
    export STOCKFISH_PATH=/usr/bin/stockfish
@@ -244,29 +254,69 @@ While the game includes a built-in `NullAI` fallback, Stockfish provides full-st
 |---|---|
 | **Select Piece / Move** | Left Mouse Click |
 | **Deselect Piece** | `Escape` or Right Mouse Click |
-| **Pawn Promotion** | Press `Q` (Queen), `R` (Rook), `B` (Bishop), or `N` (Knight) / Keys `1`-`4` |
-| **New Game** | Click the square button on the bottom right panel to reset the board |
-| **Manual Opponent Override** | Click the circle toggle on the bottom right panel to take manual control of both sides |
+| **Pawn Promotion** | Click the desired piece in the promotion dialog, or press `Q` (Queen), `R` (Rook), `B` (Bishop), `N` (Knight) / Keys `1`-`4` |
+| **Reset Game** | Click the square button (■) in the bottom-right corner |
+| **Manual Opponent Override** | Click the circle toggle (○) in the bottom-right corner to take manual control of both White and Black |
 
 ---
 
-## Configuration & Strength Tuning
+## Configuration & Difficulty Tuning
 
-Game tuning parameters are centralized in [`include/config.h`](file:///home/damaca/projects/weird-chess/include/config.h):
+Player settings and AI difficulty are configured in `assets/config.json`:
 
-- **Board Dimensions:** `CELL = 15.0f` (120x120 world units).
-- **Animation Speed:** `MOVE_ANIM_SECONDS = 0.18f`.
-- **Casual Play Tuning:**
-  - `DEFAULT_ELO = 1320` (minimum Stockfish Elo limiter rating).
-  - `DEFAULT_SKILL = 0` (Stockfish skill level 0-20).
-  - `AI_SEARCH_DEPTH = 1` (shallow ply search for quick, human-like play).
-  - `AI_BLUNDER_CHANCE = 0.35f` (35% probability of occasional casual blunders).
-- **Classification Thresholds:**
-  - *Best*: Loss < 0.15 pawns
-  - *Good*: Loss < 0.50 pawns
-  - *Inaccuracy*: Loss < 1.00 pawns
-  - *Mistake*: Loss < 2.50 pawns
-  - *Blunder*: Loss >= 2.50 pawns
+```json
+{
+  "model": {
+    "name": "tinyllama-15M-stories-Q2_K.gguf",
+    "description": "Model filename inside assets/model/ (or leave empty to auto-detect any .gguf)"
+  },
+  "story": {
+    "premise": "",
+    "seed": -1,
+    "description": "Story settings: premise (custom starting scenario), seed (-1 for random seed, or integer >= 0 for deterministic output)."
+  },
+  "typewriter_speed": 18.0,
+  "enemy": {
+    "difficulty": "easy",
+    "skill_level": 0,
+    "elo": 1320,
+    "search_depth": 1,
+    "blunder_chance": 0.35
+  }
+}
+```
+
+### Difficulty Presets
+
+| Preset | Skill Level | Elo | Search Depth | Blunder Chance | Description |
+|---|---|---|---|---|---|
+| `easy` (default) | 0 | 1320 | 1 ply | 35% | Casual play with frequent human-like oversights |
+| `medium` / `normal` | 5 | 1600 | 3 ply | 15% | Intermediate club player |
+| `hard` | 12 | 2000 | 5 ply | 5% | Strong tactical club player |
+| `master` | 20 | 2500 | 8 ply | 0% | Full strength engine play |
+
+### Move Classification Thresholds
+
+Move evaluations are categorized by centipawn loss (defined in `include/config.h`):
+- **Best:** Loss <= 0.15 pawns
+- **Excellent:** Loss <= 0.40 pawns
+- **Good:** Loss <= 0.85 pawns
+- **Inaccuracy:** Loss <= 1.75 pawns
+- **Mistake:** Loss <= 3.50 pawns
+- **Blunder:** Loss > 3.50 pawns
+- **Miss:** Surrendered a winning advantage (>= 2.00 pawns)
+
+---
+
+## Local LLM Story Narrator
+
+The embedded `LlamaNarrator` maps the dramatic flow of the game into creative prose:
+
+- **Allegorical Fiction:** The narrator translates moves, tactical threats, sacrifices, and blunders into narrative tension without naming chess pieces directly (forks represent betrayals, checks represent direct challenges, blunders trigger catastrophes).
+- **Custom Premises:** Provide any starting premise in `assets/config.json` (or leave blank for procedural generation of quirky rivalries).
+- **Adaptive Cadence:** Moves are paired into full turns (White action + Black reaction) for cohesive storytelling.
+- **Dynamic Climax:** Critical blunders or checkmates bring the story to an abrupt climax (`StoryStatus::EndedAbruptly`).
+- **Graceful Fallback:** If no GGUF model is present, the game automatically falls back to `PassThroughNarrator` to display technical move annotations and tactical alerts.
 
 ---
 
@@ -275,34 +325,25 @@ Game tuning parameters are centralized in [`include/config.h`](file:///home/dama
 Weird Chess contains an end-to-end integration test suite that tests rules, castling, en passant, promotion, tactical detectors, the Stockfish UCI handshake, and simulates a full AI-vs-AI game headlessly without requiring a window or GPU context:
 
 ```bash
-# Run tests with the local Stockfish binary
-./build/WeirdChessTests ./bin/stockfish
+# Run tests (optionally supply path to Stockfish binary)
+./build/WeirdChessTests [path-to-stockfish]
 ```
 
-### Debug Options
+### Debug Helpers
 
-- **Headless Autoplay:** Set `WEIRDCHESS_AUTOPLAY=1` to have the human side automatically make random legal moves:
+- **Headless Autoplay:** Set `WEIRDCHESS_AUTOPLAY=1` to have the human side automatically play random legal moves:
   ```bash
   WEIRDCHESS_AUTOPLAY=1 ./build/WeirdChess
   ```
-- **ImGui Overlay:** Real-time metrics, FEN output, turn indicators, and raw evaluation scores are displayed directly on the ImGui overlay.
-
----
-
-## Roadmap (Stage 2: Local LLM)
-
-Stage 1 establishes the annotation pipeline and worker thread boundaries. **Stage 2** replaces the pass-through story renderer with a local LLM via `llama.cpp`:
-
-- A small quantized GGUF model (e.g. Qwen2.5-0.5B, Llama-3.2-1B, Phi-3-mini) generates an ongoing fictional serialized story.
-- The story does **not** mention chess pieces directly; instead, tactical events on the board drive dramatic parallels in the narrative (a fork represents betrayal, a sacrifice represents a heroic gamble, a blunder triggers a sudden catastrophe).
-- Story progression scales with the phase of the game (short games end abruptly, deep endgames build extensive prose).
-- For details, see [`include/narrator/llamacpp-integration.md`](file:///home/damaca/projects/weird-chess/include/narrator/llamacpp-integration.md).
+- **ImGui Overlay:** Real-time metrics, FEN output, turn indicators, and raw evaluation scores are displayed directly on the Dear ImGui overlay.
 
 ---
 
 ## Licenses
 
-- **Weird Chess Source Code:** [MIT License](file:///home/damaca/projects/weird-chess/LICENSE)
+- **Weird Chess Source Code:** [MIT License](LICENSE)
+- **llama.cpp:** [MIT License](https://github.com/ggml-org/llama.cpp)
 - **chess-library (`chess.hpp`):** [MIT License](https://github.com/Disservin/chess-library) (Disservin)
 - **weird-engine:** Licensed under its own repository terms.
 - **Stockfish:** [GPLv3 License](https://github.com/official-stockfish/Stockfish) (Runs as an independent subprocess; not statically or dynamically linked).
+
