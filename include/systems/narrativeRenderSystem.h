@@ -180,17 +180,14 @@ namespace wchess
 			const int wrapChars = calculateWrapChars(services);
 
 			bool dirtyLines = false;
-			// Drain anything the narrator produced this frame.
+			// Sync anything the narrator produced/streamed this frame.
 			if (state.narrator)
 			{
-				auto chunks = state.narrator->stream()->drain();
-				if (!chunks.empty())
+				std::vector<std::string> updatedChunks;
+				if (state.narrator->stream()->getChunks(updatedChunks))
 				{
 					dirtyLines = true;
-					for (auto& chunk : chunks)
-					{
-						state.rawStoryChunks.push_back(chunk);
-					}
+					state.rawStoryChunks = std::move(updatedChunks);
 				}
 			}
 
@@ -218,19 +215,12 @@ namespace wchess
 
 			const size_t totalChars = state.lastTotalStoryChars;
 
-			// Progress the char-by-char typewriter effect
+			// Progress the char-by-char typewriter effect strictly respecting typewriter speed
 			if (state.storyRevealedChars < static_cast<float>(totalChars))
 			{
 				float dt = std::clamp(services.time().deltaTime(), 0.0f, 0.1f);
-				float pending = static_cast<float>(totalChars) - state.storyRevealedChars;
-				float baseSpeed = state.typewriterSpeed > 0.0f ? state.typewriterSpeed
-															   : ChessConfig::STORY_TYPEWRITER_MIN_SPEED;
-				float maxSpeed = std::max(baseSpeed, baseSpeed * 2.0f);
-				float speed = baseSpeed;
-				if (pending > 80.0f)
-				{
-					speed = std::clamp(speed + (pending - 80.0f) * 0.15f, speed, maxSpeed);
-				}
+				float speed = state.typewriterSpeed > 0.0f ? state.typewriterSpeed
+														   : ChessConfig::STORY_TYPEWRITER_MIN_SPEED;
 				state.storyRevealedChars =
 					std::min(static_cast<float>(totalChars), state.storyRevealedChars + speed * dt);
 			}

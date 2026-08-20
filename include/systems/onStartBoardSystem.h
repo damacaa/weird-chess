@@ -36,6 +36,9 @@ namespace wchess
 								 "' (skill=" + std::to_string(gameSettings.skillLevel) +
 								 ", elo=" + std::to_string(gameSettings.elo) +
 								 "), model='" + gameSettings.modelName + "'" +
+								 ", device=" + gameSettings.device +
+								 (gameSettings.device == "gpu" ? " (" + std::to_string(gameSettings.gpuLayers) + " layers)" : "") +
+								 ", threads=" + std::to_string(gameSettings.threads) +
 								 ", seed=" + (gameSettings.seed >= 0 ? std::to_string(gameSettings.seed) : "random") +
 								 ", typewriter_speed=" + std::to_string(gameSettings.typewriterSpeed) + ")");
 
@@ -157,6 +160,11 @@ namespace wchess
 		}
 
 		auto llama = std::make_shared<LlamaNarrator>();
+		llama->setDevice(gameSettings.device, gameSettings.gpuLayers);
+		if (gameSettings.threads > 0)
+		{
+			llama->setThreadCount(gameSettings.threads);
+		}
 		if (gameSettings.seed >= 0)
 		{
 			llama->setSeed(gameSettings.seed);

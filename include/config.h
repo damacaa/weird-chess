@@ -41,7 +41,7 @@ namespace ChessConfig
 	inline constexpr float PANEL_TOP_MARGIN_PX = 56.0f;
 	inline constexpr int STORY_MAX_LINES = 64;
 	inline constexpr int STORY_MAX_HISTORY_BEATS = 6;	 // max recent story paragraphs in rolling context window
-	inline constexpr int STORY_MAX_CONTEXT_TOKENS = 768; // max token budget for story context prompt
+	inline constexpr int STORY_MAX_CONTEXT_TOKENS = 400; // max token budget for story context prompt (tuned for 512 context)
 	inline constexpr std::string_view STORY_INTRO_PLACEHOLDER = "The conflict begins.";
 
 	// Typewriter text pacing (characters per second)
@@ -94,6 +94,9 @@ namespace ChessConfig
 	struct GameSettings
 	{
 		std::string modelName = "tinyllama-15M-stories-Q2_K.gguf";
+		std::string device = "cpu"; // "cpu" or "gpu" (Vulkan / CUDA offload)
+		int gpuLayers = 99;         // number of layers to offload to GPU when device is "gpu"
+		int threads = 4;          // Number of CPU threads for inference (default 4 on Steam Deck / multi-core)
 		std::string premise = ""; // custom starting premise; empty = auto-generate random premise
 		int64_t seed = -1;        // -1 = random seed, >= 0 = forced deterministic seed
 		std::string difficulty = "easy";
@@ -147,9 +150,16 @@ namespace ChessConfig
 			// 1. Model configuration
 			if (j.contains("model"))
 			{
-				if (j["model"].is_object() && j["model"].contains("name") && j["model"]["name"].is_string())
+				if (j["model"].is_object())
 				{
-					settings.modelName = j["model"]["name"].get<std::string>();
+					if (j["model"].contains("name") && j["model"]["name"].is_string())
+						settings.modelName = j["model"]["name"].get<std::string>();
+					if (j["model"].contains("threads") && j["model"]["threads"].is_number_integer())
+						settings.threads = std::max(1, j["model"]["threads"].get<int>());
+					if (j["model"].contains("device") && j["model"]["device"].is_string())
+						settings.device = j["model"]["device"].get<std::string>();
+					if (j["model"].contains("gpu_layers") && j["model"]["gpu_layers"].is_number_integer())
+						settings.gpuLayers = std::max(0, j["model"]["gpu_layers"].get<int>());
 				}
 				else if (j["model"].is_string())
 				{
@@ -160,6 +170,22 @@ namespace ChessConfig
 			{
 				settings.modelName = j["model_name"].get<std::string>();
 			}
+
+			if (j.contains("threads") && j["threads"].is_number_integer())
+			{
+				settings.threads = std::max(1, j["threads"].get<int>());
+			}
+
+			if (j.contains("device") && j["device"].is_string())
+			{
+				settings.device = j["device"].get<std::string>();
+			}
+			if (j.contains("gpu_layers") && j["gpu_layers"].is_number_integer())
+			{
+				settings.gpuLayers = std::max(0, j["gpu_layers"].get<int>());
+			}
+
+			std::transform(settings.device.begin(), settings.device.end(), settings.device.begin(), ::tolower);
 
 			// Story Premise configuration
 			if (j.contains("story") && j["story"].is_object() && j["story"].contains("premise") &&

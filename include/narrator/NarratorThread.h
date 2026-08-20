@@ -11,6 +11,10 @@
 #include "narrator/INarrator.h"
 #include "narrator/StoryStream.h"
 
+#if defined(__linux__) || defined(__APPLE__)
+#include <sys/resource.h>
+#endif
+
 #include <condition_variable>
 #include <deque>
 #include <memory>
@@ -125,6 +129,11 @@ namespace wchess
 	private:
 		void run()
 		{
+#if defined(__linux__) || defined(__APPLE__)
+			// Lower priority of background inference worker to guarantee the main game
+			// loop and OpenGL rendering maintain smooth 60 FPS without core starvation.
+			setpriority(PRIO_PROCESS, 0, 10);
+#endif
 			while (true)
 			{
 				NarratorJob job;

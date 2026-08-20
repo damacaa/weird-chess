@@ -1,7 +1,10 @@
 {
   "model": {
-    "name": "tinyllama-15M-stories-Q2_K.gguf",
-    "description": "Model filename inside assets/model/ (or leave empty to auto-detect any .gguf)"
+    "name": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    "device": "gpu",
+    "gpu_layers": 99,
+    "threads": 4,
+    "description": "Model settings: name (.gguf filename in assets/model/), device ('cpu' or 'gpu'), gpu_layers (layers to offload if gpu), threads (CPU threads)."
   },
   "story": {
     "premise": "",

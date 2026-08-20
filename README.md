@@ -262,13 +262,16 @@ The game includes the built-in `MinimaxAI` engine out of the box. If you wish to
 
 ## Configuration & Difficulty Tuning
 
-Player settings and AI difficulty are configured in `assets/config.json`:
+Player settings, AI difficulty, and LLM acceleration are configured in `assets/config.json`:
 
 ```json
 {
   "model": {
-    "name": "tinyllama-15M-stories-Q2_K.gguf",
-    "description": "Model filename inside assets/model/ (or leave empty to auto-detect any .gguf)"
+    "name": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    "device": "gpu",
+    "gpu_layers": 99,
+    "threads": 4,
+    "description": "Model settings: name (.gguf filename in assets/model/), device ('cpu' or 'gpu'), gpu_layers (layers to offload if gpu), threads (CPU threads)."
   },
   "story": {
     "premise": "",
@@ -313,6 +316,9 @@ Move evaluations are categorized by centipawn loss (defined in `include/config.h
 The embedded `LlamaNarrator` maps the dramatic flow of the game into creative prose:
 
 - **Allegorical Fiction:** The narrator translates moves, tactical threats, sacrifices, and blunders into narrative tension without naming chess pieces directly (forks represent betrayals, checks represent direct challenges, blunders trigger catastrophes).
+- **Vulkan GPU & Multi-Thread CPU Acceleration:** Supports full GPU layer offloading (Vulkan) and multi-threaded CPU SIMD inference with Flash Attention (`flash_attn = true`).
+- **KV Cache Prefix Caching:** Reuses previous turn prompt prefixes in the KV cache, avoiding redundant prompt re-evaluation and generating move updates in milliseconds.
+- **Genre-Seeded Procedural Premises:** Generates randomized, vivid opening scenarios (space opera, noir thriller, samurai drama, cyberpunk, dark fantasy, etc.) with named characters and escalating stakes.
 - **Custom Premises:** Provide any starting premise in `assets/config.json` (or leave blank for procedural generation of quirky rivalries).
 - **Adaptive Cadence:** Moves are paired into full turns (White action + Black reaction) for cohesive storytelling.
 - **Dynamic Climax:** Critical blunders or checkmates bring the story to an abrupt climax (`StoryStatus::EndedAbruptly`).
