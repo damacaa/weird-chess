@@ -900,11 +900,29 @@ namespace wchess
 			}
 			if (ann.hasCapture || ann.move.isCapture)
 			{
+				auto pieceValue = [](PieceType p) {
+					switch (p) {
+						case PieceType::Queen: return 9;
+						case PieceType::Rook: return 5;
+						case PieceType::Bishop: return 3;
+						case PieceType::Knight: return 3;
+						default: return 1;
+					}
+				};
+
+				int capVal = pieceValue(ann.pieceCaptured);
+				int movVal = pieceValue(ann.pieceMoved);
+
 				if (ann.pieceCaptured == PieceType::Queen)
 					return moverName + " delivered a devastating blow, severely crippling " + enemyName + ".";
-				if (ann.pieceCaptured == PieceType::Rook || ann.pieceCaptured == PieceType::Knight ||
-					ann.pieceCaptured == PieceType::Bishop)
+				
+				if (capVal > movVal)
+					return moverName + " executed a brilliant tactical strike, taking down a superior force.";
+				else if (capVal == movVal && capVal >= 3)
+					return moverName + " clashed head-on with " + enemyName + " in an even exchange of power.";
+				else if (capVal >= 3)
 					return moverName + " struck a solid hit against " + enemyName + ".";
+					
 				return moverName + " chipped away at the defenses of " + enemyName + ".";
 			}
 			if (ann.tactics.fork || ann.tactics.skewer)
