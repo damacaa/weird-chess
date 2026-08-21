@@ -1107,11 +1107,20 @@ namespace wchess
 
 			tokens.resize(static_cast<size_t>(n_tokens));
 
-			// Register recent prompt tokens into the sampler penalty buffer to penalize echoing the prompt
-			int promptTokensToPenalize = std::min<int>(static_cast<int>(tokens.size()), 64);
-			for (size_t pi = tokens.size() - promptTokensToPenalize; pi < tokens.size(); ++pi)
+			// Penalize recent story history explicitly to prevent repetitive output.
+			// We avoid penalizing the raw prompt tokens from the end because that would penalize the 'dramaticEvent',
+			// forcing the model to hallucinate contradictory words to escape the penalty.
+			int beatsToPenalize = std::min<int>(static_cast<int>(m_storyHistory.size()), 5);
+			for (size_t i = m_storyHistory.size() - beatsToPenalize; i < m_storyHistory.size(); ++i)
 			{
-				llama_sampler_accept(m_sampler, tokens[pi]);
+				const std::string& beat = m_storyHistory[i];
+				std::vector<llama_token> hTokens(beat.size() + 16);
+				int hn = llama_tokenize(m_vocab, beat.c_str(), static_cast<int32_t>(beat.size()), hTokens.data(), static_cast<int32_t>(hTokens.size()), false, false);
+				if (hn > 0)
+				{
+					for (int k = 0; k < hn; ++k)
+						llama_sampler_accept(m_sampler, hTokens[k]);
+				}
 			}
 
 			// KV Cache Prefix Reuse: check how many prompt tokens match the cached KV prefix
