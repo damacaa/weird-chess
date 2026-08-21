@@ -232,6 +232,13 @@ namespace wchess
 			if (text.empty())
 				return "";
 
+			auto balanceQuotes = [](std::string s) {
+				size_t quotes = 0;
+				for (char c : s) { if (c == '"') quotes++; }
+				if (quotes % 2 != 0) s += '"';
+				return s;
+			};
+
 			// Find the last sentence terminator ('.', '!', '?')
 			size_t lastPunct = text.find_last_of(".!?");
 			if (lastPunct != std::string::npos)
@@ -245,18 +252,18 @@ namespace wchess
 				std::string sub = text.substr(0, end);
 				size_t lastNonSpace = sub.find_last_not_of(" \t\r\n");
 				if (lastNonSpace != std::string::npos)
-					return sub.substr(0, lastNonSpace + 1);
-				return sub;
+					sub = sub.substr(0, lastNonSpace + 1);
+				return balanceQuotes(sub);
 			}
 
 			// If no sentence terminator exists, find last word boundary and append a period
 			size_t lastSpace = text.rfind(' ');
 			if (lastSpace != std::string::npos && lastSpace > 10)
 			{
-				return text.substr(0, lastSpace) + ".";
+				return balanceQuotes(text.substr(0, lastSpace) + ".");
 			}
 
-			return text + ".";
+			return balanceQuotes(text + ".");
 		}
 
 		bool load(const std::string& modelPath)
@@ -343,12 +350,13 @@ namespace wchess
 				llama_sampler_free(m_sampler);
 				m_sampler = nullptr;
 			}
-			// Initialize sampling chain (temp 0.85, top-p 0.92, repetition penalty 1.25)
+			// Initialize sampling chain (temp 0.85, min-p 0.05, repetition penalty 1.25)
 			// Higher temp + stronger rep penalty = more creative, less repetitive prose from small models
+			// min_p outperforms top_p on very small models by cutting nonsense tails more aggressively
 			llama_sampler_chain_params sparams = llama_sampler_chain_default_params();
 			m_sampler = llama_sampler_chain_init(sparams);
-			llama_sampler_chain_add(m_sampler, llama_sampler_init_penalties(64, 1.25f, 0.0f, 0.0f));
-			llama_sampler_chain_add(m_sampler, llama_sampler_init_top_p(0.92f, 1));
+			llama_sampler_chain_add(m_sampler, llama_sampler_init_penalties(256, 1.25f, 0.0f, 0.0f));
+			llama_sampler_chain_add(m_sampler, llama_sampler_init_min_p(0.05f, 1));
 			llama_sampler_chain_add(m_sampler, llama_sampler_init_temp(0.85f));
 			uint32_t seed = (m_configuredSeed >= 0)
 								? static_cast<uint32_t>(m_configuredSeed)
@@ -409,44 +417,45 @@ namespace wchess
 				const char* chatTemplate = (m_model != nullptr) ? llama_model_chat_template(m_model) : nullptr;
 				bool isChat = (chatTemplate != nullptr);
 
-				if (m_configuredPremise.size() >= 25 && m_configuredPremise.find('.') != std::string::npos)
-				{
-					// Already a full descriptive premise sentence
-					m_activePremise = m_configuredPremise;
-					fullIntro = m_activePremise;
-					out.append(fullIntro);
-				}
-				else if (isChat)
+				if (isChat)
 				{
 					std::string systemMsg =
-						"You are a vivid storyteller who writes punchy, dramatic prose. "
-						"Write ONE opening sentence (max 22 words) introducing the battle between " + m_whiteLeader + " and " + m_blackLeader + ". "
-						"You MUST mention both " + m_whiteLeader + " and " + m_blackLeader + " by name. "
-						"NEVER use chess words.";
+						"You are a dramatic storyteller. The user will provide a story premise. "
+						"Write ONE vivid sentence to continue the story. "
+						"Mention both " + m_whiteLeader + " and " + m_blackLeader + " by name. "
+						"No chess terms.";
 
 					std::string userMsg =
+						"Characters: " + m_whiteLeader + " and " + m_blackLeader + ".\n"
 						"Premise: " + m_configuredPremise + "\n"
-						"Write a gripping opening sentence introducing " + m_whiteLeader + " and " + m_blackLeader + ":";
+						"Write the next sentence to continue the story:";
 
 					openingPrompt = "<|im_start|>system\n" + systemMsg + "<|im_end|>\n<|im_start|>user\n" + userMsg +
 									"<|im_end|>\n<|im_start|>assistant\n";
 
+					std::string displayPremise = m_configuredPremise;
+					if (!displayPremise.empty())
+					{
+						if (displayPremise[0] >= 'a' && displayPremise[0] <= 'z')
+							displayPremise[0] = static_cast<char>(std::toupper(displayPremise[0]));
+						if (displayPremise.back() != '.' && displayPremise.back() != '!' && displayPremise.back() != '?' && displayPremise.back() != '"')
+							displayPremise += ".";
+					}
+
+					m_activePremise = displayPremise;
 					out.startChunk();
+					out.appendToCurrentChunk(m_activePremise + " ");
+
 					std::string generatedIntro = generateText(openingPrompt, 50, true, &out);
 					std::string cleanIntro = trimToCompleteSentence(sanitizeForEngine(generatedIntro));
 
-					if (!cleanIntro.empty() && cleanIntro.size() >= 8 &&
-						cleanIntro.find(m_blackLeader) != std::string::npos)
+					if (!cleanIntro.empty() && cleanIntro.size() >= 8)
 					{
-						fullIntro = cleanIntro;
-					}
-					else if (!cleanIntro.empty() && cleanIntro.size() >= 8)
-					{
-						fullIntro = m_whiteLeader + " confronted " + m_blackLeader + " as " + cleanIntro;
+						fullIntro = m_activePremise + " " + cleanIntro;
 					}
 					else
 					{
-						fullIntro = m_whiteLeader + " clashed with " + m_blackLeader + " in a fierce confrontation.";
+						fullIntro = m_activePremise;
 					}
 					m_activePremise = fullIntro;
 					out.updateCurrentChunk(fullIntro);
@@ -485,14 +494,14 @@ namespace wchess
 				if (isChat)
 				{
 					std::string systemMsg =
-						"You are a vivid storyteller who writes punchy, dramatic prose. "
-						"Write ONE opening sentence (max 22 words) introducing the clash between " + m_whiteLeader + " and " + m_blackLeader + " " + gp.setting + ". "
-						"You MUST mention both " + m_whiteLeader + " and " + m_blackLeader + " by name. "
-						"NEVER use chess words.";
+						"You are a storyteller. Write ONE opening sentence establishing a tense standoff. "
+						"Mention both " +
+						m_whiteLeader + " and " + m_blackLeader + " by name. No chess terms.";
 
 					std::string userMsg =
-						"Setting: " + gp.setting + "\n"
-						"Write a gripping opening sentence introducing " + m_whiteLeader + " and " + m_blackLeader + ":";
+						"Characters: " + m_whiteLeader + " and " + m_blackLeader + ".\n"
+						"Setting: " + gp.setting + ".\n"
+						"Write the opening line of their clash:";
 
 					openingPrompt = "<|im_start|>system\n" + systemMsg + "<|im_end|>\n<|im_start|>user\n" + userMsg +
 									"<|im_end|>\n<|im_start|>assistant\n";
@@ -576,25 +585,8 @@ namespace wchess
 			else if (annotation.fullMoveNumber > 25)
 				maxTokens = 60;
 
-			std::string leadActor;
-			if (m_bufferedWhite.has_value() &&
-				(m_bufferedWhite->hasCapture || m_bufferedWhite->tactics.check ||
-				 m_bufferedWhite->quality == MoveQuality::Brilliant))
-			{
-				leadActor = m_whiteLeader;
-			}
-			else if (annotation.hasCapture || annotation.tactics.check ||
-					 annotation.quality == MoveQuality::Brilliant)
-			{
-				leadActor = m_blackLeader;
-			}
-			else
-			{
-				leadActor = (m_turnIndex % 2 == 1) ? m_whiteLeader : m_blackLeader;
-			}
-
 			// 3. Build rolling context prompt preserving premise + recent narrative history
-			std::string contextPrompt = buildContextPrompt(dramaticEvent, maxTokens, leadActor);
+			std::string contextPrompt = buildContextPrompt(dramaticEvent, maxTokens);
 
 			// Log comprehensive turn inputs before inference
 			WeirdEngine::Logger::log("-------------------- [Story Turn #" + std::to_string(m_turnIndex) +
@@ -895,42 +887,7 @@ namespace wchess
 		{
 			if (ann.move.isCastling)
 			{
-				return moverName + " retreated behind fortified walls, bracing for what comes next.";
-			}
-
-			// Richer piece metaphors that work across genres
-			std::string role;
-			std::string actionVerb;
-			switch (ann.pieceMoved)
-			{
-				case PieceType::Pawn:
-					role = "expendable vanguard";
-					actionVerb = "advanced";
-					break;
-				case PieceType::Knight:
-					role = "swift outrider";
-					actionVerb = "flanked";
-					break;
-				case PieceType::Bishop:
-					role = "cunning operative";
-					actionVerb = "cut diagonally through the chaos";
-					break;
-				case PieceType::Rook:
-					role = "siege weapon";
-					actionVerb = "bore down";
-					break;
-				case PieceType::Queen:
-					role = "champion";
-					actionVerb = "charged forward";
-					break;
-				case PieceType::King:
-					role = "commander";
-					actionVerb = "stepped cautiously";
-					break;
-				default:
-					role = "forces";
-					actionVerb = "moved";
-					break;
+				return moverName + " suddenly shifted to a safer, fortified position.";
 			}
 
 			if (ann.tactics.checkmate)
@@ -944,11 +901,11 @@ namespace wchess
 			if (ann.hasCapture || ann.move.isCapture)
 			{
 				if (ann.pieceCaptured == PieceType::Queen)
-					return moverName + " tore away " + enemyName + " most powerful asset.";
+					return moverName + " delivered a devastating blow, severely crippling " + enemyName + ".";
 				if (ann.pieceCaptured == PieceType::Rook || ann.pieceCaptured == PieceType::Knight ||
 					ann.pieceCaptured == PieceType::Bishop)
-					return moverName + " cut down one of " + enemyName + " key allies.";
-				return moverName + " eliminated " + enemyName + " front line.";
+					return moverName + " struck a solid hit against " + enemyName + ".";
+				return moverName + " chipped away at the defenses of " + enemyName + ".";
 			}
 			if (ann.tactics.fork || ann.tactics.skewer)
 			{
@@ -959,25 +916,63 @@ namespace wchess
 				return moverName + " pinned " + enemyName + " in place, cutting off their escape.";
 			}
 
-			// Quality-based descriptions with active verbs
+			// Quality-based descriptions with random variants to prevent repetitive rolling history
+			int v = static_cast<int>(ann.fullMoveNumber + static_cast<int>(ann.pieceMoved)) % 3;
 			switch (ann.quality)
 			{
 				case MoveQuality::Best:
-					return moverName + " maneuvered their " + role + " into a commanding position.";
+				{
+					const char* opts[] = {
+						" executed a flawless maneuver.",
+						" shifted into a highly advantageous stance.",
+						" took firm control of the engagement."
+					};
+					return moverName + std::string(opts[v]);
+				}
 				case MoveQuality::Excellent:
-					return moverName + " deployed their " + role + " with sharp tactical foresight.";
+				{
+					const char* opts[] = {
+						" pressed forward with tactical foresight.",
+						" adjusted their approach with calculated efficiency.",
+						" maneuvered into a commanding position."
+					};
+					return moverName + std::string(opts[v]);
+				}
 				case MoveQuality::Good:
-					return moverName + " sent their " + role + " forward, testing " + enemyName + " defenses.";
+				{
+					const char* opts[] = {
+						" probed the defenses of %s.",
+						" advanced steadily, testing the resolve of %s.",
+						" shifted their focus, preparing for the next clash with %s."
+					};
+					char buf[160];
+					snprintf(buf, sizeof(buf), opts[v], enemyName.c_str());
+					return moverName + std::string(buf);
+				}
 				case MoveQuality::Inaccuracy:
-					return moverName + " wavered slightly, their " + role + " landing just off the mark.";
+				{
+					const char* opts[] = {
+						" wavered slightly, their movement landing just off the mark.",
+						" hesitated, drifting out of optimal position.",
+						" misjudged the angle, leaving a slight opening."
+					};
+					return moverName + std::string(opts[v]);
+				}
 				case MoveQuality::Mistake:
-					return moverName + " overextended their " + role + ", leaving a dangerous gap.";
+				{
+					const char* opts[] = {
+						" overextended, leaving a dangerous gap in their defense.",
+						" stumbled, exposing a sudden weakness.",
+						" made a costly misstep, and the cracks began to show."
+					};
+					return moverName + std::string(opts[v]);
+				}
 				case MoveQuality::Blunder:
-					return moverName + " made a catastrophic miscalculation, and the tide turned violently against them.";
+					return moverName + " made a catastrophic miscalculation, and the tide turned violently.";
 				case MoveQuality::Miss:
 					return moverName + " hesitated at a critical moment, letting a deadly opportunity slip away.";
 				default:
-					return moverName + " " + actionVerb + " their " + role + ".";
+					return moverName + " shifted their position on the battlefield.";
 			}
 		}
 
@@ -1018,10 +1013,11 @@ namespace wchess
 			return std::max(0, n);
 		}
 
-		std::string buildContextPrompt(const std::string& dramaticEvent, int maxTokens, const std::string& leadActor)
+		std::string buildContextPrompt(const std::string& dramaticEvent, int maxTokens)
 		{
 			// Target token budget for the context prompt
-			int targetHistoryTokens = std::max(48, static_cast<int>(m_ctxCapacity) - maxTokens - 40);
+			// Reserve ~150 tokens for the system prompt, ChatML tags, and the dramaticEvent itself.
+			int targetHistoryTokens = std::max(48, static_cast<int>(m_ctxCapacity) - maxTokens - 150);
 
 			int premiseTokens = countTokens(m_activePremise);
 			targetHistoryTokens = std::max(24, targetHistoryTokens - premiseTokens);
@@ -1052,16 +1048,16 @@ namespace wchess
 			if (chatTemplate != nullptr)
 			{
 				std::string systemMsg =
-					"You are a dramatic fiction author continuing a serialized story between " + m_whiteLeader + " and " + m_blackLeader + ". "
-					"Write ONE short action sentence (max 18 words) showing what happens next. "
-					"Use character names, active verbs, and sensory details. "
-					"NEVER repeat or echo sentences from the prompt. NEVER use chess words.";
+					"You are a narrator recounting an ongoing rivalry between " + m_whiteLeader + " and " + m_blackLeader + ". "
+					"Write ONE clear sentence continuing the story based on the latest events. "
+					"Match the intensity of the action: keep it grounded for simple maneuvers, and save the drama for direct attacks. "
+					"Never mention chess.";
 
 				std::string userMsg = "Rivals: " + m_whiteLeader + " vs " + m_blackLeader + "\n"
 									  "Story so far:\n" + m_activePremise;
 				if (!historyStr.empty())
 					userMsg += "\n" + historyStr;
-				userMsg += "\n\nConflict event:\n" + dramaticEvent + "\n\nWrite ONE new sentence describing what " + leadActor + " does next (do NOT repeat the event text):";
+				userMsg += "\n\nWhat just happened:\n" + dramaticEvent + "\n\nContinue the story in one sentence:";
 
 				return "<|im_start|>system\n" + systemMsg + "<|im_end|>\n<|im_start|>user\n" + userMsg + "<|im_end|>\n<|im_start|>assistant\n";
 			}
@@ -1074,7 +1070,7 @@ namespace wchess
 					prompt += m_activePremise + " ";
 				if (!historyStr.empty())
 					prompt += historyStr + " ";
-				prompt += dramaticEvent + " " + leadActor + " ";
+				prompt += dramaticEvent + " ";
 				return prompt;
 			}
 		}
@@ -1102,7 +1098,7 @@ namespace wchess
 			tokens.resize(static_cast<size_t>(n_tokens));
 
 			// Register recent prompt tokens into the sampler penalty buffer to penalize echoing the prompt
-			int promptTokensToPenalize = std::min<int>(static_cast<int>(tokens.size()), 64);
+			int promptTokensToPenalize = std::min<int>(static_cast<int>(tokens.size()), 256);
 			for (size_t pi = tokens.size() - promptTokensToPenalize; pi < tokens.size(); ++pi)
 			{
 				llama_sampler_accept(m_sampler, tokens[pi]);

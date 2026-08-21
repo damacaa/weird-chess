@@ -7,7 +7,7 @@
     "description": "Model settings: name (.gguf filename in assets/model/), device ('cpu' or 'gpu'), gpu_layers (layers to offload if gpu), threads (CPU threads)."
   },
   "story": {
-    "premise": "dog vs roomba",
+    "premise": "",
     "seed": -1,
     "description": "Story settings: premise (custom starting scenario), seed (-1 for random seed, or integer >= 0 for deterministic output)."
   },
