@@ -586,7 +586,8 @@ namespace wchess
 				maxTokens = 60;
 
 			// 3. Build rolling context prompt preserving premise + recent narrative history
-			std::string contextPrompt = buildContextPrompt(dramaticEvent, maxTokens);
+			std::string leadActor = (m_turnIndex % 2 == 1) ? m_whiteLeader : m_blackLeader;
+			std::string contextPrompt = buildContextPrompt(dramaticEvent, maxTokens, leadActor);
 
 			// Log comprehensive turn inputs before inference
 			WeirdEngine::Logger::log("-------------------- [Story Turn #" + std::to_string(m_turnIndex) +
@@ -913,7 +914,7 @@ namespace wchess
 				int capVal = pieceValue(ann.pieceCaptured);
 				int movVal = pieceValue(ann.pieceMoved);
 
-				if (ann.pieceCaptured == PieceType::Queen)
+				if (ann.pieceCaptured == PieceType::Queen && capVal > movVal)
 					return moverName + " delivered a devastating blow, severely crippling " + enemyName + ".";
 				
 				if (capVal > movVal)
@@ -1031,7 +1032,7 @@ namespace wchess
 			return std::max(0, n);
 		}
 
-		std::string buildContextPrompt(const std::string& dramaticEvent, int maxTokens)
+		std::string buildContextPrompt(const std::string& dramaticEvent, int maxTokens, const std::string& leadActor)
 		{
 			// Target token budget for the context prompt
 			// Reserve ~150 tokens for the system prompt, ChatML tags, and the dramaticEvent itself.
@@ -1040,34 +1041,27 @@ namespace wchess
 			int premiseTokens = countTokens(m_activePremise);
 			targetHistoryTokens = std::max(24, targetHistoryTokens - premiseTokens);
 
-			// Collect recent story paragraphs that fit within token budget
-			std::vector<std::string> selectedHistory;
-			int accumulatedTokens = 0;
-
+			std::string historyStr;
+			int currentHistoryTokens = 0;
 			for (auto it = m_storyHistory.rbegin(); it != m_storyHistory.rend(); ++it)
 			{
-				int beatTokens = countTokens(*it) + 2;
-				if (accumulatedTokens + beatTokens > targetHistoryTokens)
+				int lineTokens = countTokens(*it);
+				if (currentHistoryTokens + lineTokens > targetHistoryTokens)
 					break;
-				selectedHistory.insert(selectedHistory.begin(), *it);
-				accumulatedTokens += beatTokens;
-			}
-
-			std::string historyStr;
-			for (const auto& beat : selectedHistory)
-			{
 				if (!historyStr.empty())
-					historyStr += " ";
-				historyStr += beat;
+					historyStr = (*it) + " " + historyStr;
+				else
+					historyStr = *it;
+				currentHistoryTokens += lineTokens;
 			}
 
-			// Check if model has a chat template
-			const char* chatTemplate = (m_model != nullptr) ? llama_model_chat_template(m_model) : nullptr;
+			const struct llama_model* model = llama_get_model(m_ctx);
+			const char* chatTemplate = llama_model_chat_template(model);
 			if (chatTemplate != nullptr)
 			{
 				std::string systemMsg =
 					"You are a narrator recounting an ongoing rivalry between " + m_whiteLeader + " and " + m_blackLeader + ". "
-					"Write ONE clear sentence continuing the story based on the latest events. "
+					"Write ONE short action sentence showing what happens next. "
 					"Match the intensity of the action: keep it grounded for simple maneuvers, and save the drama for direct attacks. "
 					"Never mention chess.";
 
@@ -1075,20 +1069,18 @@ namespace wchess
 									  "Story so far:\n" + m_activePremise;
 				if (!historyStr.empty())
 					userMsg += "\n" + historyStr;
-				userMsg += "\n\nWhat just happened:\n" + dramaticEvent + "\n\nContinue the story in one sentence:";
+				userMsg += "\n\nWhat just happened:\n" + dramaticEvent + "\n\nWrite ONE new sentence describing what " + leadActor + " does next:";
 
 				return "<|im_start|>system\n" + systemMsg + "<|im_end|>\n<|im_start|>user\n" + userMsg + "<|im_end|>\n<|im_start|>assistant\n";
 			}
 			else
 			{
-				// Pure narrative continuation (ideal for story models like TinyStories)
-				// Anchor with lead actor name to prevent off-topic drifts (e.g. "Once upon a time...")
-				std::string prompt;
+				std::string prompt = "Continue the story. ";
 				if (!m_activePremise.empty())
 					prompt += m_activePremise + " ";
 				if (!historyStr.empty())
 					prompt += historyStr + " ";
-				prompt += dramaticEvent + " ";
+				prompt += dramaticEvent + " " + leadActor + " ";
 				return prompt;
 			}
 		}
@@ -1116,7 +1108,7 @@ namespace wchess
 			tokens.resize(static_cast<size_t>(n_tokens));
 
 			// Register recent prompt tokens into the sampler penalty buffer to penalize echoing the prompt
-			int promptTokensToPenalize = std::min<int>(static_cast<int>(tokens.size()), 256);
+			int promptTokensToPenalize = std::min<int>(static_cast<int>(tokens.size()), 64);
 			for (size_t pi = tokens.size() - promptTokensToPenalize; pi < tokens.size(); ++pi)
 			{
 				llama_sampler_accept(m_sampler, tokens[pi]);
