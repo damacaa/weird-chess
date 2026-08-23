@@ -16,7 +16,7 @@ An experimental chess game built on **[weird-engine](https://github.com/damacaa/
 |   8  [r] [.] [b] [q] [k] [b] [.] [r]    |   you chewing?"                         |
 |   7  [p] [p] [p] [.] [.] [p] [p] [p]    |                                         |
 |   6  [.] [.] [.] [.] [.] [.] [.] [.]    |  Rowan stepped forward to claim open    |
-|   5  [.] [.] [.] [p] [.] [.] [.] [.]    |  ground. Vane advanced their frontline |
+|   5  [.] [.] [.] [p] [.] [.] [.] [.]    |  ground. Vane advanced their frontline  |
 |   4  [.] [.] [.] [P] [.] [.] [.] [.]    |  presence.                              |
 |   3  [.] [.] [N] [.] [.] [.] [.] [.]    |                                         |
 |   2  [P] [P] [P] [.] [P] [P] [P] [P]    |                                         |
@@ -151,7 +151,7 @@ AnnotationSystem::update() ◀──── Publish MoveAnnotation
 NarrativeRenderSystem::update() ◀─── Drain StoryStream ──────────────────┘
         │
 AISystem::update()
-  └─ Gated until human animation & annotation finish
+        └─ Gated until human animation & annotation finish
 ```
 
 1. **Player Click:** The move is immediately validated and applied to the board. The visual animation starts on frame 0.
