@@ -267,7 +267,7 @@ Player settings, AI difficulty, and LLM acceleration are configured in `assets/c
 ```json
 {
   "model": {
-    "name": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    "name": "gemma-4-E2B-it-Q4_K_M.gguf",
     "device": "gpu",
     "gpu_layers": 99,
     "threads": 4,

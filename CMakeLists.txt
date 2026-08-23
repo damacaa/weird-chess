@@ -124,8 +124,20 @@ set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
+    SPIRV-Headers
+    GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Headers.git
+    GIT_TAG vulkan-sdk-1.4.309.0
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(SPIRV-Headers)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/SPIRV-HeadersConfig.cmake" "include_directories(\"${spirv-headers_SOURCE_DIR}/include\")\n")
+set(SPIRV-Headers_DIR "${CMAKE_CURRENT_BINARY_DIR}" CACHE PATH "" FORCE)
+
+FetchContent_Declare(
     llama
-    URL https://github.com/ggml-org/llama.cpp/archive/refs/tags/b4710.tar.gz
+    GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
+    GIT_TAG b9999
+    GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(llama)
 
