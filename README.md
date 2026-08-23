@@ -298,16 +298,21 @@ Player settings, AI difficulty, and LLM acceleration are configured in `assets/c
 | `hard` | 12 | 2000 | 5 ply | 5% | Strong tactical club player |
 | `master` | 20 | 2500 | 8 ply | 0% | Full strength engine play |
 
-### Move Classification Thresholds
+### Move Classification & Impact Thresholds
 
-Move evaluations are categorized by centipawn loss (defined in `include/config.h`):
-- **Best:** Loss <= 0.15 pawns
-- **Excellent:** Loss <= 0.40 pawns
-- **Good:** Loss <= 0.85 pawns
-- **Inaccuracy:** Loss <= 1.75 pawns
-- **Mistake:** Loss <= 3.50 pawns
-- **Blunder:** Loss > 3.50 pawns
-- **Miss:** Surrendered a winning advantage (>= 2.00 pawns)
+Move evaluations are categorized by centipawn loss and win probability change (defined in `include/config.h`):
+- **Best:** Loss <= 0.15 pawns (or captures maintaining winning positions)
+- **Excellent:** Loss <= 0.40 pawns and win drop <= 5%
+- **Good:** Loss <= 0.85 pawns and win drop <= 10%
+- **Inaccuracy:** Loss <= 1.75 pawns and win drop <= 20%
+- **Mistake:** Loss <= 3.50 pawns and win drop <= 35%
+- **Blunder:** Loss > 3.50 pawns or win drop > 35%
+- **Miss:** Surrendered a winning advantage (>= 2.00 pawns or win drop >= 20%)
+
+#### Game Impact Levels
+- **Minor:** Win chance swing < 25% (routine maneuvers, minor inaccuracies, and gradual positional drift)
+- **Major:** Win chance swing 25% - 45% (significant tactical errors and material concessions)
+- **Critical:** Win chance swing >= 45% or checkmate (game-deciding blunders and match conclusions)
 
 ---
 

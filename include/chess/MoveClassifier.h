@@ -79,9 +79,9 @@ namespace wchess
 		}
 
 		// 3. Miss: A winning advantage / tactic existed (eval was >= +2.00 or win chance >= 70%)
-		// and the player failed to find it, significantly throwing away the win (win chance drop >= 15% or loss >= 2.0
+		// and the player failed to find it, significantly throwing away the win (win chance drop >= 20% or loss >= 2.0
 		// pawns).
-		if (!isBest && in.evalBeforeCp >= 200 && (lossPawns >= ChessConfig::MISS_WIN_PAWNS || winLoss >= 0.15f))
+		if (!isBest && in.evalBeforeCp >= 200 && (lossPawns >= ChessConfig::MISS_WIN_PAWNS || winLoss >= 0.20f))
 		{
 			if (in.evalAfterCp < 200)
 				return MoveQuality::Miss;
@@ -98,10 +98,10 @@ namespace wchess
 		if (lossPawns <= ChessConfig::GOOD_LOSS_PAWNS && winLoss <= 0.10f)
 			return MoveQuality::Good;
 
-		if (lossPawns <= ChessConfig::INACCURACY_LOSS_PAWNS && winLoss <= 0.18f)
+		if (lossPawns <= ChessConfig::INACCURACY_LOSS_PAWNS && winLoss <= 0.20f)
 			return MoveQuality::Inaccuracy;
 
-		if (lossPawns <= ChessConfig::MISTAKE_LOSS_PAWNS || winLoss <= 0.35f)
+		if (lossPawns <= ChessConfig::MISTAKE_LOSS_PAWNS && winLoss <= 0.35f)
 			return MoveQuality::Mistake;
 
 		return MoveQuality::Blunder;

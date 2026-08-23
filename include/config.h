@@ -7,10 +7,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <json/json.h>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <json/json.h>
 
 namespace ChessConfig
 {
@@ -40,8 +40,9 @@ namespace ChessConfig
 	inline constexpr float PANEL_RIGHT_MARGIN_PX = 24.0f;
 	inline constexpr float PANEL_TOP_MARGIN_PX = 56.0f;
 	inline constexpr int STORY_MAX_LINES = 64;
-	inline constexpr int STORY_MAX_HISTORY_BEATS = 6;	 // max recent story paragraphs in rolling context window
-	inline constexpr int STORY_MAX_CONTEXT_TOKENS = 400; // max token budget for story context prompt (tuned for 512 context)
+	inline constexpr int STORY_MAX_HISTORY_BEATS = 6; // max recent story paragraphs in rolling context window
+	inline constexpr int STORY_MAX_CONTEXT_TOKENS =
+		400; // max token budget for story context prompt (tuned for 512 context)
 	inline constexpr std::string_view STORY_INTRO_PLACEHOLDER = "The conflict begins.";
 
 	// Typewriter text pacing (characters per second)
@@ -63,12 +64,8 @@ namespace ChessConfig
 
 	// ---- LLM Narrator (llama.cpp) ----
 	inline const std::string LLAMA_MODEL_PATH_ENV = "LLAMA_MODEL_PATH";
-	inline const std::vector<std::string> LLAMA_MODEL_DIRECTORIES = {
-		"assets/model",
-		"assets/models",
-		"bin/models",
-		"models"
-	};
+	inline const std::vector<std::string> LLAMA_MODEL_DIRECTORIES = {"assets/model", "assets/models", "bin/models",
+																	 "models"};
 
 	// Human-strength defaults: tuned for very easy / casual play.
 	inline constexpr int DEFAULT_SKILL = 0;			  // 0-20 Stockfish internal skill knob
@@ -90,20 +87,24 @@ namespace ChessConfig
 	inline constexpr float MISTAKE_LOSS_PAWNS = 3.50f;
 	inline constexpr float MISS_WIN_PAWNS = 2.0f; // a winning advantage that was surrendered = "miss"
 
+	// Win probability swing thresholds
+	inline constexpr float IMPACT_MAJOR_WIN_SHIFT = 0.25f;	  // >= 25% win shift = Major impact
+	inline constexpr float IMPACT_CRITICAL_WIN_SHIFT = 0.45f; // >= 45% win shift = Critical impact
+
 	// ---- Human-readable Configuration (assets/config.json) ----
 	struct GameSettings
 	{
 		std::string modelName = "tinyllama-15M-stories-Q2_K.gguf";
 		std::string device = "cpu"; // "cpu" or "gpu" (Vulkan / CUDA offload)
-		int gpuLayers = 99;         // number of layers to offload to GPU when device is "gpu"
-		int threads = 4;          // Number of CPU threads for inference (default 4 on Steam Deck / multi-core)
-		std::string premise = ""; // custom starting premise; empty = auto-generate random premise
-		int64_t seed = -1;        // -1 = random seed, >= 0 = forced deterministic seed
+		int gpuLayers = 99;			// number of layers to offload to GPU when device is "gpu"
+		int threads = 4;			// Number of CPU threads for inference (default 4 on Steam Deck / multi-core)
+		std::string premise = "";	// custom starting premise; empty = auto-generate random premise
+		int64_t seed = -1;			// -1 = random seed, >= 0 = forced deterministic seed
 		std::string difficulty = "easy";
-		int skillLevel = DEFAULT_SKILL; // 0
-		int elo = DEFAULT_ELO;          // 1320
-		int searchDepth = AI_SEARCH_DEPTH; // 1
-		float blunderChance = AI_BLUNDER_CHANCE; // 0.35f
+		int skillLevel = DEFAULT_SKILL;						// 0
+		int elo = DEFAULT_ELO;								// 1320
+		int searchDepth = AI_SEARCH_DEPTH;					// 1
+		float blunderChance = AI_BLUNDER_CHANCE;			// 0.35f
 		float typewriterSpeed = STORY_TYPEWRITER_MIN_SPEED; // 18.0f chars/sec
 	};
 

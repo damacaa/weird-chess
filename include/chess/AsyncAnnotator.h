@@ -100,9 +100,9 @@ namespace wchess
 			ann.winChanceDelta = ann.winChanceAfter - ann.winChanceBefore;
 
 			float winShiftAbs = std::abs(ann.winChanceDelta);
-			if (winShiftAbs >= 0.35f || ann.tactics.checkmate)
+			if (winShiftAbs >= ChessConfig::IMPACT_CRITICAL_WIN_SHIFT || ann.tactics.checkmate)
 				ann.impact = ImpactLevel::Critical;
-			else if (winShiftAbs >= 0.15f)
+			else if (winShiftAbs >= ChessConfig::IMPACT_MAJOR_WIN_SHIFT)
 				ann.impact = ImpactLevel::Major;
 			else
 				ann.impact = ImpactLevel::Minor;
