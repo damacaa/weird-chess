@@ -694,6 +694,30 @@ static void testNarratorContext()
 		CHECK(cleaned.find("-") != std::string::npos);
 	}
 
+	// 4. Special tokens and casing normalization checks
+	{
+		std::string tokenJunk = "<end_of_turn>.";
+		std::string cleaned = LlamaNarrator::cleanNarrativeText(tokenJunk, "Raider Max", "Warlord Stryker");
+		CHECK(cleaned.empty());
+
+		std::string tokenJunk2 = "</start_of_turn>";
+		CHECK(LlamaNarrator::cleanNarrativeText(tokenJunk2).empty());
+
+		std::string lowercaseStory =
+			"raider max's light riders darted into an open post against warlord stryker's perimeter";
+		std::string fixed = LlamaNarrator::cleanNarrativeText(lowercaseStory, "Raider Max", "Warlord Stryker");
+		CHECK(fixed.find("Raider Max") != std::string::npos);
+		CHECK(fixed.find("Warlord Stryker") != std::string::npos);
+		CHECK(fixed[0] == 'R');
+		CHECK(fixed.back() == '.');
+
+		std::string embeddedTokens = "Raider Max advanced across the dunes.<end_of_turn>";
+		std::string cleanedEmbedded =
+			LlamaNarrator::cleanNarrativeText(embeddedTokens, "Raider Max", "Warlord Stryker");
+		CHECK(cleanedEmbedded.find("<end_of_turn>") == std::string::npos);
+		CHECK(cleanedEmbedded == "Raider Max advanced across the dunes.");
+	}
+
 	printf("narrator context checks passed\n");
 }
 
