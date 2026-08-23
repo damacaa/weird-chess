@@ -40,9 +40,9 @@ namespace ChessConfig
 	inline constexpr float PANEL_RIGHT_MARGIN_PX = 24.0f;
 	inline constexpr float PANEL_TOP_MARGIN_PX = 56.0f;
 	inline constexpr int STORY_MAX_LINES = 64;
-	inline constexpr int STORY_MAX_HISTORY_BEATS = 6; // max recent story paragraphs in rolling context window
+	inline constexpr int STORY_MAX_HISTORY_BEATS = 24; // max recent story paragraphs in rolling context window
 	inline constexpr int STORY_MAX_CONTEXT_TOKENS =
-		400; // max token budget for story context prompt (tuned for 512 context)
+		1800; // max token budget for story context prompt (tuned for 2048 context)
 	inline constexpr std::string_view STORY_INTRO_PLACEHOLDER = "The conflict begins.";
 
 	// Typewriter text pacing (characters per second)
