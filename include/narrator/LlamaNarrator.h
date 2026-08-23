@@ -48,6 +48,7 @@ namespace wchess
 		void setPremise(const std::string& premise) override
 		{
 			m_configuredPremise = premise;
+			m_setting = premise;
 		}
 
 		std::string getPremise() const override
@@ -113,6 +114,10 @@ namespace wchess
 			m_activePremise.clear();
 			m_cachedPromptTokens.clear();
 			m_turnIndex = 0;
+			if (!m_configuredPremise.empty())
+			{
+				m_setting = m_configuredPremise;
+			}
 			if (m_model != nullptr && m_ctx != nullptr)
 			{
 				initSampler(); // draws a fresh new random seed if m_configuredSeed < 0, or enforces configured seed
@@ -123,13 +128,14 @@ namespace wchess
 			}
 		}
 
-		// Sanitizes text to only contain characters supported by WeirdEngine's SDF font
-		// (A-Z, a-z, 0-9 and !"&_*()-=+?|.,:;). Apostrophes and non-supported symbols are converted or stripped.
-		static std::string sanitizeForEngine(const std::string& raw, bool isFullSentence = true)
+		// Cleans raw generated narrative: strips markdown bolding/codeblocks/prefixes,
+		// strips special tokens and chat markers, normalizes smart quotes/dashes,
+		// canonicalizes character names, and trims to a complete sentence while preserving apostrophes.
+		static std::string cleanNarrativeText(const std::string& raw, const std::string& whiteLeader = "",
+											  const std::string& blackLeader = "")
 		{
 			std::string text = raw;
 
-			// Replace UTF-8 multi-byte punctuation before single-byte filtering
 			auto replaceAll = [](std::string& str, const std::string& from, const std::string& to)
 			{
 				size_t startPos = 0;
@@ -140,6 +146,207 @@ namespace wchess
 				}
 			};
 
+			// Strip known special token and chat template markers
+			const std::vector<std::string> specialTags = {"<end_of_turn>",
+														  "</end_of_turn>",
+														  "<end_of_of_turn>",
+														  "</end_of_of_turn>",
+														  "<start_of_turn>",
+														  "</start_of_turn>",
+														  "<start_of_turn>user",
+														  "<start_of_turn>model",
+														  "<|im_end|>",
+														  "<|im_start|>",
+														  "<|eot_id|>",
+														  "<|start_header_id|>",
+														  "<|end_header_id|>",
+														  "<|begin_of_text|>",
+														  "<|end_of_text|>",
+														  "<eos>",
+														  "<bos>",
+														  "<s>",
+														  "</s>",
+														  "<turn_end>",
+														  "<turn_start>",
+														  "[INST]",
+														  "[/INST]",
+														  "<<SYS>>",
+														  "<</SYS>>",
+														  "&lt;end_of_turn&gt;",
+														  "&lt;start_of_turn&gt;"};
+			for (const auto& tag : specialTags)
+			{
+				replaceAll(text, tag, "");
+			}
+
+			// Normalize multi-byte UTF-8 punctuation
+			replaceAll(text, "\xE2\x80\x98", "'");	 // ‘
+			replaceAll(text, "\xE2\x80\x99", "'");	 // ’
+			replaceAll(text, "\xE2\x80\x9C", "\"");	 // “
+			replaceAll(text, "\xE2\x80\x9D", "\"");	 // ”
+			replaceAll(text, "\xE2\x80\x93", "-");	 // en-dash
+			replaceAll(text, "\xE2\x80\x94", "-");	 // em-dash
+			replaceAll(text, "\xE2\x80\xA6", "..."); // …
+			replaceAll(text, "**", "");				 // Strip markdown bold
+			replaceAll(text, "__", "");				 // Strip markdown bold
+			replaceAll(text, "```", "");			 // Strip code blocks
+			replaceAll(text, "`", "");
+
+			// Remove leading hallucinated prefix tags
+			const std::vector<std::string> prefixes = {"Story:",
+													   "Story :",
+													   "Continuation:",
+													   "Narrator:",
+													   "Narrator :",
+													   "Paragraph:",
+													   "Assistant:",
+													   "assistant:",
+													   "Response:",
+													   "Turn:",
+													   "Action:",
+													   "Scene:",
+													   "Outcome:",
+													   "Beat:",
+													   "Note:",
+													   "Here is the story:",
+													   "Here is the next sentence:",
+													   "Here is a sentence:",
+													   "Here is one sentence:"};
+			for (const auto& prefix : prefixes)
+			{
+				size_t p = text.find(prefix);
+				if (p == 0)
+				{
+					text = text.substr(prefix.size());
+				}
+			}
+
+			// Strip leading markdown characters (*, _, #, >, -, etc.) and whitespace/punctuation
+			size_t start = text.find_first_not_of(" \t\r\n*_#>-:;.,");
+			if (start == std::string::npos)
+				return "";
+			size_t end = text.find_last_not_of(" \t\r\n*_#");
+			text = text.substr(start, end - start + 1);
+
+			// Strip stray leading list numbers (e.g. "1. ", "2) ")
+			if (!text.empty() && text[0] >= '0' && text[0] <= '9')
+			{
+				size_t nonDigit = text.find_first_not_of("0123456789");
+				if (nonDigit != std::string::npos && nonDigit <= 3)
+				{
+					size_t afterMarker = nonDigit;
+					if (text[afterMarker] == '.' || text[afterMarker] == ':' || text[afterMarker] == ')' ||
+						text[afterMarker] == '-')
+					{
+						afterMarker++;
+					}
+					if (afterMarker < text.size() && text[afterMarker] == ' ')
+					{
+						size_t nextWord = text.find_first_not_of(" \t", afterMarker);
+						if (nextWord != std::string::npos)
+							text = text.substr(nextWord);
+					}
+				}
+			}
+
+			// Ensure string contains alphabetic characters
+			bool hasAlpha = false;
+			for (char c : text)
+			{
+				if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+				{
+					hasAlpha = true;
+					break;
+				}
+			}
+			if (!hasAlpha)
+				return "";
+
+			// Capitalize first letter of sentence if lowercase
+			if (text[0] >= 'a' && text[0] <= 'z')
+			{
+				text[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(text[0])));
+			}
+
+			// Normalize casing for rival names if provided
+			auto fixLeaderName = [&text](const std::string& leader)
+			{
+				if (leader.empty() || leader == "White" || leader == "Black" || leader.size() > text.size())
+					return;
+				std::string lowerText = text;
+				std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
+				std::string lowerLeader = leader;
+				std::transform(lowerLeader.begin(), lowerLeader.end(), lowerLeader.begin(), ::tolower);
+
+				size_t pos = 0;
+				while ((pos = lowerText.find(lowerLeader, pos)) != std::string::npos)
+				{
+					bool validBefore = (pos == 0 || !std::isalpha(static_cast<unsigned char>(text[pos - 1])));
+					size_t endPos = pos + lowerLeader.size();
+					bool validAfter =
+						(endPos == text.size() || !std::isalpha(static_cast<unsigned char>(text[endPos])));
+					if (validBefore && validAfter)
+					{
+						text.replace(pos, leader.length(), leader);
+					}
+					pos += leader.length();
+				}
+			};
+			fixLeaderName(whiteLeader);
+			fixLeaderName(blackLeader);
+
+			return trimToCompleteSentence(text);
+		}
+
+		// Sanitizes text to only contain characters supported by WeirdEngine's SDF font
+		// (A-Z, a-z, 0-9 and !"&_*()-=+?|.,:;). Apostrophes and non-supported symbols are converted or stripped.
+		static std::string sanitizeForEngine(const std::string& raw, bool isFullSentence = true)
+		{
+			std::string text = raw;
+
+			auto replaceAll = [](std::string& str, const std::string& from, const std::string& to)
+			{
+				size_t startPos = 0;
+				while ((startPos = str.find(from, startPos)) != std::string::npos)
+				{
+					str.replace(startPos, from.length(), to);
+					startPos += to.length();
+				}
+			};
+
+			// Strip known special token and chat template markers
+			const std::vector<std::string> specialTags = {"<end_of_turn>",
+														  "</end_of_turn>",
+														  "<end_of_of_turn>",
+														  "</end_of_of_turn>",
+														  "<start_of_turn>",
+														  "</start_of_turn>",
+														  "<start_of_turn>user",
+														  "<start_of_turn>model",
+														  "<|im_end|>",
+														  "<|im_start|>",
+														  "<|eot_id|>",
+														  "<|start_header_id|>",
+														  "<|end_header_id|>",
+														  "<|begin_of_text|>",
+														  "<|end_of_text|>",
+														  "<eos>",
+														  "<bos>",
+														  "<s>",
+														  "</s>",
+														  "<turn_end>",
+														  "<turn_start>",
+														  "[INST]",
+														  "[/INST]",
+														  "<<SYS>>",
+														  "<</SYS>>",
+														  "&lt;end_of_turn&gt;",
+														  "&lt;start_of_turn&gt;"};
+			for (const auto& tag : specialTags)
+			{
+				replaceAll(text, tag, "");
+			}
+
 			replaceAll(text, "\xE2\x80\x98", "");	 // ‘
 			replaceAll(text, "\xE2\x80\x99", "");	 // ’
 			replaceAll(text, "\xE2\x80\x9C", "\"");	 // “
@@ -148,6 +355,8 @@ namespace wchess
 			replaceAll(text, "\xE2\x80\x94", "-");	 // em-dash
 			replaceAll(text, "\xE2\x80\xA6", "..."); // …
 			replaceAll(text, "'", "");				 // strip standard apostrophes per engine charset rule
+			replaceAll(text, "**", "");
+			replaceAll(text, "__", "");
 
 			std::string out;
 			out.reserve(text.size());
@@ -186,20 +395,25 @@ namespace wchess
 				}
 			}
 
-			// Trim leading/trailing whitespace
-			size_t start = out.find_first_not_of(" \t\r\n");
+			// Trim leading/trailing whitespace and markdown formatting
+			size_t start = out.find_first_not_of(" \t\r\n*_#>-");
 			if (start == std::string::npos)
 				return "";
-			size_t end = out.find_last_not_of(" \t\r\n");
+			size_t end = out.find_last_not_of(" \t\r\n*_#");
 			out = out.substr(start, end - start + 1);
 
-			// Strip leading bullet markers (e.g. "- ", "* ")
-			if (out.size() >= 2 && (out[0] == '-' || out[0] == '*') && out[1] == ' ')
+			// Ensure string contains alphabetic characters
+			bool hasAlpha = false;
+			for (char c : out)
 			{
-				size_t nextWord = out.find_first_not_of(" \t-*", 0);
-				if (nextWord != std::string::npos)
-					out = out.substr(nextWord);
+				if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+				{
+					hasAlpha = true;
+					break;
+				}
 			}
+			if (!hasAlpha)
+				return "";
 
 			// Strip stray leading list numbers (e.g. "1 ", "2. ", "3) ")
 			if (!out.empty() && out[0] >= '0' && out[0] <= '9')
@@ -222,13 +436,26 @@ namespace wchess
 				}
 			}
 
-			return out;
+			return trimToCompleteSentence(out);
 		}
 
 		// Ensures text finishes on a complete sentence, trimming any trailing cut-off fragments
 		static std::string trimToCompleteSentence(const std::string& text)
 		{
 			if (text.empty())
+				return "";
+
+			// Ensure string has alphanumeric content before formatting
+			bool hasAlpha = false;
+			for (char c : text)
+			{
+				if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
+				{
+					hasAlpha = true;
+					break;
+				}
+			}
+			if (!hasAlpha)
 				return "";
 
 			auto balanceQuotes = [](std::string s)
@@ -321,7 +548,7 @@ namespace wchess
 
 			llama_context_params ctxParams = llama_context_default_params();
 			int32_t trainCtx = llama_model_n_ctx_train(m_model);
-			m_ctxCapacity = (trainCtx > 0) ? std::min<uint32_t>(512, static_cast<uint32_t>(trainCtx)) : 512;
+			m_ctxCapacity = (trainCtx > 0) ? std::min<uint32_t>(2048, static_cast<uint32_t>(trainCtx)) : 2048;
 			ctxParams.n_ctx = m_ctxCapacity;
 			ctxParams.n_threads = m_threadCount > 0 ? m_threadCount : 4;
 			int hwThreads = static_cast<int>(std::thread::hardware_concurrency());
@@ -357,14 +584,14 @@ namespace wchess
 				llama_sampler_free(m_sampler);
 				m_sampler = nullptr;
 			}
-			// Initialize sampling chain (temp 0.85, min-p 0.05, repetition penalty 1.25)
-			// Higher temp + stronger rep penalty = more creative, less repetitive prose from small models
-			// min_p outperforms top_p on very small models by cutting nonsense tails more aggressively
+			// Initialize sampling chain (temp 0.80, min-p 0.05, repetition penalty 1.10)
+			// Cuts off repetitive echo loops while providing creative, grounded sentences and preserving named
+			// entities.
 			llama_sampler_chain_params sparams = llama_sampler_chain_default_params();
 			m_sampler = llama_sampler_chain_init(sparams);
-			llama_sampler_chain_add(m_sampler, llama_sampler_init_penalties(256, 1.25f, 0.0f, 0.0f));
+			llama_sampler_chain_add(m_sampler, llama_sampler_init_penalties(64, 1.10f, 0.0f, 0.0f));
 			llama_sampler_chain_add(m_sampler, llama_sampler_init_min_p(0.05f, 1));
-			llama_sampler_chain_add(m_sampler, llama_sampler_init_temp(0.85f));
+			llama_sampler_chain_add(m_sampler, llama_sampler_init_temp(0.80f));
 			uint32_t seed =
 				(m_configuredSeed >= 0)
 					? static_cast<uint32_t>(m_configuredSeed)
@@ -393,16 +620,28 @@ namespace wchess
 
 		void narrateIntro(StoryStream& out) override
 		{
-			// Reset history and select/initialize the premise and leaders for this match
+			// Reset history and select/initialize the premise, setting and leaders for this match
 			m_storyHistory.clear();
 			m_turnIndex = 0;
 			m_whiteLeader = "White";
 			m_blackLeader = "Black";
+			m_setting = "in an intense clash";
 
 			if (!isLoaded())
 			{
-				m_activePremise = m_configuredPremise.empty() ? std::string(ChessConfig::STORY_INTRO_PLACEHOLDER)
-															  : m_configuredPremise;
+				if (!m_configuredPremise.empty())
+				{
+					extractLeaderNames(m_configuredPremise, m_whiteLeader, m_blackLeader);
+					m_activePremise = m_configuredPremise;
+				}
+				else
+				{
+					GenrePremise gp = pickRandomGenreSeed();
+					m_setting = gp.setting;
+					generateProceduralRivals(m_setting, m_whiteLeader, m_blackLeader);
+					m_activePremise =
+						m_whiteLeader + " and " + m_blackLeader + " met for a decisive clash (" + m_setting + ").";
+				}
 				out.append(m_activePremise);
 				out.setStatus(StoryStatus::Idle);
 				WeirdEngine::Logger::log("==================== [Story Opening Premise] ====================");
@@ -417,26 +656,30 @@ namespace wchess
 
 			if (!m_configuredPremise.empty())
 			{
-				// Extract named entities from configured premise (e.g. "dog vs roomba" -> "Dog", "Roomba")
+				// Extract named entities from configured premise (e.g. "Captain Flint vs Commodore Sterling on stormy
+				// Caribbean waters")
 				extractLeaderNames(m_configuredPremise, m_whiteLeader, m_blackLeader);
+				m_setting = m_configuredPremise;
 
 				const char* chatTemplate = (m_model != nullptr) ? llama_model_chat_template(m_model, nullptr) : nullptr;
 				bool isChat = (chatTemplate != nullptr);
 
 				if (isChat)
 				{
-					std::string systemMsg = "You are a storyteller. The user will provide a story premise. "
-											"Write ONE subtle, grounded sentence to set up the standoff between " +
-											m_whiteLeader + " and " + m_blackLeader +
-											" by name. "
-											"Keep it atmospheric and calm. No chess terms.";
+					std::string systemMsg =
+						"You are a storyteller. The user will provide a story premise.\n"
+						"Write ONE subtle, grounded opening sentence establishing a quiet, tense standoff between " +
+						m_whiteLeader + " and " + m_blackLeader +
+						" by name.\n"
+						"Focus on the sensory details of the surroundings. Avoid cliches like starting with 'The air'. "
+						"No dramatic action yet. No chess terms.";
 
 					std::string userMsg = "Characters: " + m_whiteLeader + " and " + m_blackLeader +
 										  ".\n"
 										  "Premise: " +
 										  m_configuredPremise +
 										  "\n"
-										  "Write the next sentence to continue the story:";
+										  "Write the opening line of their clash:";
 
 					openingPrompt = formatChatPrompt(systemMsg, userMsg);
 
@@ -452,10 +695,10 @@ namespace wchess
 
 					m_activePremise = displayPremise;
 					out.startChunk();
-					out.appendToCurrentChunk(m_activePremise + " ");
+					out.appendToCurrentChunk(sanitizeForEngine(m_activePremise) + " ");
 
 					std::string generatedIntro = generateText(openingPrompt, 50, true, &out);
-					std::string cleanIntro = trimToCompleteSentence(sanitizeForEngine(generatedIntro));
+					std::string cleanIntro = cleanNarrativeText(generatedIntro, m_whiteLeader, m_blackLeader);
 
 					if (!cleanIntro.empty() && cleanIntro.size() >= 8)
 					{
@@ -466,16 +709,16 @@ namespace wchess
 						fullIntro = m_activePremise;
 					}
 					m_activePremise = fullIntro;
-					out.updateCurrentChunk(fullIntro);
+					out.updateCurrentChunk(sanitizeForEngine(fullIntro));
 				}
 				else
 				{
 					m_activePremise = m_configuredPremise;
 					out.startChunk();
-					out.appendToCurrentChunk(m_activePremise);
+					out.appendToCurrentChunk(sanitizeForEngine(m_activePremise));
 					openingPrompt = m_activePremise + " ";
 					std::string generatedIntro = generateText(openingPrompt, 50, true, &out);
-					std::string cleanIntro = trimToCompleteSentence(sanitizeForEngine(generatedIntro));
+					std::string cleanIntro = cleanNarrativeText(generatedIntro, m_whiteLeader, m_blackLeader);
 
 					if (!cleanIntro.empty() && cleanIntro.size() >= 8)
 					{
@@ -486,7 +729,7 @@ namespace wchess
 						fullIntro = m_activePremise;
 					}
 					m_activePremise = fullIntro;
-					out.updateCurrentChunk(fullIntro);
+					out.updateCurrentChunk(sanitizeForEngine(fullIntro));
 				}
 			}
 			else
@@ -496,16 +739,39 @@ namespace wchess
 				bool isChat = (chatTemplate != nullptr);
 
 				GenrePremise gp = pickRandomGenreSeed();
-				m_whiteLeader = gp.white;
-				m_blackLeader = gp.black;
+				m_setting = gp.setting;
 
 				if (isChat)
 				{
+					// Step 1: Prompt the model to invent setting-specific names for the rivals
+					std::string nameSys = "You are a creative writer. In this setting (" + gp.setting +
+										  "), "
+										  "invent TWO distinct, flavorful rival characters, commanders, or codenames "
+										  "(1 to 3 words each).\n"
+										  "Respond ONLY with their names separated by ' vs '.\n"
+										  "Example: Captain Avery vs Commodore Vance";
+					std::string nameUser = "Setting: " + gp.setting + "\nRivals:";
+					std::string namePrompt = formatChatPrompt(nameSys, nameUser);
+					std::string rivalsText = generateText(namePrompt, 25, false, nullptr);
+
+					extractLeaderNames(rivalsText, m_whiteLeader, m_blackLeader);
+
+					if (m_whiteLeader == "White" || m_blackLeader == "Black" || m_whiteLeader == m_blackLeader)
+					{
+						generateProceduralRivals(gp.setting, m_whiteLeader, m_blackLeader);
+					}
+
+					// Step 2: Write the opening atmospheric standoff sentence featuring the rivals
 					std::string systemMsg =
-						"You are a storyteller. Write ONE calm opening sentence establishing a quiet, tense standoff. "
+						"You are a storyteller. Write ONE calm opening sentence establishing a quiet, tense standoff "
+						"between " +
+						m_whiteLeader + " and " + m_blackLeader + " in this setting (" + gp.setting +
+						").\n"
 						"Mention both " +
 						m_whiteLeader + " and " + m_blackLeader +
-						" by name. No explosions or combat yet. No chess terms.";
+						" by name.\n"
+						"Focus on the sensory details of the surroundings. Avoid cliches like starting with 'The air'. "
+						"No dramatic action yet. No chess terms.";
 
 					std::string userMsg = "Characters: " + m_whiteLeader + " and " + m_blackLeader +
 										  ".\n"
@@ -518,17 +784,18 @@ namespace wchess
 				}
 				else
 				{
+					generateProceduralRivals(gp.setting, m_whiteLeader, m_blackLeader);
 					openingPrompt = pickRandomCompletionSeed();
 				}
 
 				out.startChunk();
 				if (!isChat)
 				{
-					out.appendToCurrentChunk(openingPrompt);
+					out.appendToCurrentChunk(sanitizeForEngine(openingPrompt));
 				}
 
 				std::string generatedIntro = generateText(openingPrompt, 50, true, &out);
-				std::string cleanIntro = trimToCompleteSentence(sanitizeForEngine(generatedIntro));
+				std::string cleanIntro = cleanNarrativeText(generatedIntro, m_whiteLeader, m_blackLeader);
 
 				if (!isChat && !cleanIntro.empty())
 				{
@@ -541,10 +808,10 @@ namespace wchess
 				else
 				{
 					fullIntro =
-						m_whiteLeader + " and " + m_blackLeader + " met " + gp.setting + " for a decisive clash.";
+						m_whiteLeader + " and " + m_blackLeader + " met for a decisive clash (" + gp.setting + ").";
 				}
 				m_activePremise = fullIntro;
-				out.updateCurrentChunk(fullIntro);
+				out.updateCurrentChunk(sanitizeForEngine(fullIntro));
 			}
 
 			out.setStatus(StoryStatus::Idle);
@@ -568,9 +835,11 @@ namespace wchess
 			// Option C cadence:
 			// Buffer White's standard move and pair it with Black's reply so the story
 			// narrates full turns with cohesive action and counter-action.
-			bool isCritical =
-				annotation.tactics.checkmate || annotation.gameEnded ||
-				(annotation.quality == MoveQuality::Blunder && annotation.impact == ImpactLevel::Critical);
+			bool isCheckmate =
+				annotation.tactics.checkmate || (annotation.gameEnded && annotation.gameState == GameState::Checkmate);
+			bool isGameOver = isCheckmate || annotation.gameEnded;
+			bool isCritical = isGameOver || (annotation.quality == MoveQuality::Blunder &&
+											 annotation.impact == ImpactLevel::Critical);
 
 			if (annotation.mover == Color::White && !isCritical)
 			{
@@ -581,7 +850,7 @@ namespace wchess
 			m_turnIndex++;
 			out.setStatus(StoryStatus::Generating);
 
-			// 1. Translate chess moves into dramatic conflict action using the active match leaders
+			// 1. Translate chess moves into dramatic conflict action with explicit actor attribution
 			std::string dramaticEvent = formatTurnConflict(m_bufferedWhite, annotation, m_whiteLeader, m_blackLeader);
 			std::string whiteSan =
 				m_bufferedWhite.has_value() ? (m_bufferedWhite->san.empty() ? "?" : m_bufferedWhite->san) : "";
@@ -593,16 +862,27 @@ namespace wchess
 			std::string blackQuality = qualityName(annotation.quality);
 			std::string blackEval = AnnotationWriter::formatScore(annotation.evalAfterCp);
 
-			// 2. Scale max tokens based on game phase (concise, 1-2 punchy sentences)
+			// 2. Determine prompt type, token budget, and sentence constraints
 			int maxTokens = 50;
-			if (annotation.fullMoveNumber < 5)
-				maxTokens = 45;
-			else if (annotation.fullMoveNumber > 25)
-				maxTokens = 60;
+			std::string contextPrompt;
+			bool stopAtSentence = true;
 
-			// 3. Build rolling context prompt preserving premise + recent narrative history
-			std::string leadActor = (m_turnIndex % 2 == 1) ? m_whiteLeader : m_blackLeader;
-			std::string contextPrompt = buildContextPrompt(dramaticEvent, maxTokens, leadActor);
+			if (isCheckmate)
+			{
+				maxTokens = 90; // allow 2-3 dramatic concluding sentences for the climax
+				stopAtSentence = false;
+				contextPrompt = buildClimaxPrompt(dramaticEvent, maxTokens, annotation);
+			}
+			else
+			{
+				if (annotation.fullMoveNumber < 5)
+					maxTokens = 45;
+				else if (annotation.fullMoveNumber > 25)
+					maxTokens = 60;
+				stopAtSentence = true;
+				std::string leadActor = (m_turnIndex % 2 == 1) ? m_whiteLeader : m_blackLeader;
+				contextPrompt = buildContextPrompt(dramaticEvent, maxTokens, leadActor);
+			}
 
 			// Log comprehensive turn inputs before inference
 			WeirdEngine::Logger::log("-------------------- [Story Turn #" + std::to_string(m_turnIndex) + " (Move " +
@@ -615,14 +895,12 @@ namespace wchess
 			WeirdEngine::Logger::log("[Action Translation] " + dramaticEvent);
 			WeirdEngine::Logger::log("[LLM Prompt Input] " + contextPrompt);
 
-			m_bufferedWhite.reset();
-
-			// 4. Generate story continuation (streaming token pieces directly into active StoryStream chunk)
+			// 3. Generate story continuation (streaming token pieces directly into active StoryStream chunk)
 			out.startChunk();
-			std::string generatedText = generateText(contextPrompt, maxTokens, true, &out);
-			std::string cleanStory = trimToCompleteSentence(sanitizeForEngine(generatedText));
+			std::string generatedText = generateText(contextPrompt, maxTokens, stopAtSentence, &out);
+			std::string cleanStory = cleanNarrativeText(generatedText, m_whiteLeader, m_blackLeader);
 
-			if (!cleanStory.empty())
+			if (!cleanStory.empty() && cleanStory.size() >= 8)
 			{
 				std::string fullContext = m_activePremise;
 				for (const auto& beat : m_storyHistory)
@@ -631,7 +909,7 @@ namespace wchess
 				}
 
 				m_storyHistory.push_back(cleanStory);
-				out.updateCurrentChunk(cleanStory);
+				out.updateCurrentChunk(sanitizeForEngine(cleanStory));
 
 				WeirdEngine::Logger::log("[LLM Story Output #" + std::to_string(m_turnIndex) + "] " + cleanStory);
 				// Log clean structured dataset entry for model training
@@ -640,32 +918,47 @@ namespace wchess
 			}
 			else
 			{
-				// Fallback to dramatic event line if model produces empty output
-				std::string fallback = trimToCompleteSentence(sanitizeForEngine(dramaticEvent));
-				if (!fallback.empty())
+				// Fallback to clean narrative prose if model produces empty or invalid output
+				std::string fallback =
+					formatTurnFallbackProse(m_bufferedWhite, annotation, m_whiteLeader, m_blackLeader);
+				std::string cleanFallback = cleanNarrativeText(fallback, m_whiteLeader, m_blackLeader);
+				if (!cleanFallback.empty())
 				{
-					m_storyHistory.push_back(fallback);
-					out.updateCurrentChunk(fallback);
+					std::string fullContext = m_activePremise;
+					for (const auto& beat : m_storyHistory)
+					{
+						fullContext += " " + beat;
+					}
+
+					m_storyHistory.push_back(cleanFallback);
+					out.updateCurrentChunk(sanitizeForEngine(cleanFallback));
 					WeirdEngine::Logger::log("[LLM Story Output #" + std::to_string(m_turnIndex) + " (Fallback)] " +
-											 fallback);
+											 cleanFallback);
+					logDatasetEntry(m_turnIndex, annotation.fullMoveNumber, whiteSan, whiteQuality, whiteEval, blackSan,
+									blackQuality, blackEval, dramaticEvent, fullContext, contextPrompt, cleanFallback);
 				}
 			}
 
-			// 5. Update story status based on game climax
-			if (annotation.tactics.checkmate || (annotation.gameEnded && annotation.gameState == GameState::Checkmate))
+			m_bufferedWhite.reset();
+
+			// 4. Update story status based on game climax
+			if (isCheckmate)
 			{
 				out.setStatus(StoryStatus::EndedAbruptly);
 				logMatchSummary("Checkmate victory");
 			}
-			else if (annotation.quality == MoveQuality::Blunder && annotation.impact == ImpactLevel::Critical)
-			{
-				out.setStatus(StoryStatus::EndedAbruptly);
-				logMatchSummary("Catastrophic collapse");
-			}
 			else if (annotation.gameEnded)
 			{
-				out.setStatus(StoryStatus::EndedNaturally);
-				logMatchSummary("Game concluded");
+				if (annotation.quality == MoveQuality::Blunder && annotation.impact == ImpactLevel::Critical)
+				{
+					out.setStatus(StoryStatus::EndedAbruptly);
+					logMatchSummary("Catastrophic collapse");
+				}
+				else
+				{
+					out.setStatus(StoryStatus::EndedNaturally);
+					logMatchSummary("Game concluded");
+				}
 			}
 			else
 			{
@@ -685,29 +978,41 @@ namespace wchess
 
 		struct GenrePremise
 		{
-			std::string white;
-			std::string black;
 			std::string setting;
 		};
 
-		// Picks a specific genre+setting seed with explicit named rivals
+		// Picks a vague yet imaginative setting seed
 		static GenrePremise pickRandomGenreSeed()
 		{
-			static const std::vector<GenrePremise> seeds = {
-				{"Admiral Vance", "Warlord Kael", "in the burning orbit of a dying star"},
-				{"Detective Cross", "Boss Moretti", "in a rain-soaked 1940s city alley"},
-				{"Captain Flint", "Commodore Sterling", "on stormy Caribbean waters racing for sunken treasure"},
-				{"Hacker Nyx", "Enforcer Vector", "battling inside a megacorp neural network"},
-				{"Lord Nobunaga", "Ronin Jin", "on a misty wooden bridge at dawn"},
-				{"Raider Max", "Warlord Stryker", "fighting over the last clean water oasis"},
-				{"Sky Captain Drake", "Air Marshal Vane", "dueling in armored airships above a burning city"},
-				{"Archmage Thorne", "Necromancer Malakor", "at the gates of a cursed forgotten academy"},
-				{"Sheriff Dalton", "The Rattlesnake Kid", "in a high-noon standoff in a ghost town"},
-				{"Sub Commander Hayes", "Captain Volkov", "stalking each other in the frozen ocean depths"},
-				{"Chef Luigi", "Chef Pierre", "in a fierce culinary rivalry for the master cup"},
-				{"Gladiator Spartacus", "Champion Crassus", "in the blood-soaked Colosseum arena"},
-				{"Hunter Rowan", "Bounty Hunter Jax", "crossing paths in a brutal arctic blizzard"},
-				{"General Marcus", "Rebel Leader Kira", "on opposite sides of an imperial coup"}};
+			static const std::vector<GenrePremise> seeds = {{"pirates"},
+															{"science fiction"},
+															{"comedy"},
+															{"unexpected adversaries"},
+															{"cyberpunk noir"},
+															{"high fantasy"},
+															{"gothic horror"},
+															{"wild west"},
+															{"space opera"},
+															{"steampunk Victorian"},
+															{"mythological duel"},
+															{"post-apocalyptic wasteland"},
+															{"feudal samurai drama"},
+															{"deep sea expedition"},
+															{"superheroes and villains"},
+															{"espionage thriller"},
+															{"culinary showdown"},
+															{"ancient gladiators"},
+															{"courtroom drama"},
+															{"interdimensional rift"},
+															{"medieval siege"},
+															{"dystopian rebellion"},
+															{"arctic survival"},
+															{"paranormal mystery"},
+															{"martial arts tournament"},
+															{"fairy tale with a dark twist"},
+															{"time travel paradox"},
+															{"corporate espionage"},
+															{"bureaucratic absurdity"}};
 
 			auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 			size_t idx = static_cast<size_t>(now) % seeds.size();
@@ -718,24 +1023,59 @@ namespace wchess
 		static std::string pickRandomCompletionSeed()
 		{
 			static const std::vector<std::string> seeds = {
-				"Commander Voss aimed the cannon at the approaching fleet, knowing Admiral Crane would ",
-				"The necromancer raised the dead army as ",
-				"Captain Blackthorn drew his blade on the burning deck, locking eyes with ",
-				"In the neon-lit alley, the hacker known as Ghost confronted ",
-				"The two warlords met at the edge of the wasteland, each refusing to ",
-				"Through the blizzard, the hunter tracked footprints that could only belong to ",
-				"Deep beneath the ocean, the submarine lurched as ",
-				"The rebel leader climbed the fortress wall at midnight, knowing the general ",
-			};
+				"The opposing fleet appeared along the horizon as the vanguard prepared to ",
+				"The dark forces gathered at the border while the scouts watched from ",
+				"On the stormy deck, the two captains locked eyes as ",
+				"In the neon-lit alleyway, the rogue operative confronted ",
+				"The two rival commanders met at the edge of the contested ground, refusing to ",
+				"Through the blinding snow, the advance patrol tracked movement ahead as ",
+				"Deep beneath the surface, the vessels closed the distance while ",
+				"At the fortress gates at midnight, the defenders watched as "};
 
 			auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 			size_t idx = static_cast<size_t>(now) % seeds.size();
 			return seeds[idx];
 		}
 
+		static void generateProceduralRivals(const std::string& setting, std::string& whiteLeader,
+											 std::string& blackLeader)
+		{
+			(void)setting;
+			static const std::vector<std::string> titlesA = {
+				"Agent",  "Captain",  "Commander",	"Director", "Warlord", "Marshal",
+				"Archon", "Shadow",	  "Cipher",		"Vanguard", "Baron",   "Inquisitor",
+				"Oracle", "Overseer", "Chancellor", "Provost",	"Consul",  "Envoy"};
+			static const std::vector<std::string> titlesB = {
+				"Operative", "Commodore", "General", "Handler",	 "Chieftain", "Enforcer",
+				"Magister",	 "Specter",	  "Vector",	 "Champion", "Count",	  "Justiciar",
+				"Phantom",	 "Sentience", "Prefect", "Reeve",	 "Tribune",	  "Legate"};
+			static const std::vector<std::string> rootsA = {
+				"Vane",	 "Cross", "Kael",	"Sterling", "Dorne",   "Drake",	 "Voss", "Radek", "Thorne", "Valen",
+				"Kovak", "Soren", "Mercer", "Rostov",	"Ashford", "Zephyr", "Onyx", "Solas", "Gideon", "Corvus"};
+			static const std::vector<std::string> rootsB = {"Moretti", "Kane",	 "Gable",	"Stryker",	 "Malakor",
+															"Volkov",  "Crane",	 "Morales", "Vance",	 "Nyx",
+															"Brandt",  "Graves", "Helios",	"Vesper",	 "Sinclair",
+															"Vortex",  "Cinder", "Krell",	"Balthazar", "Drakos"};
+
+			auto now = static_cast<uint64_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+			size_t iA = (now ^ (now >> 16)) % titlesA.size();
+			size_t iB = ((now >> 8) ^ (now >> 24)) % titlesB.size();
+			size_t rA = ((now >> 4) ^ (now >> 12)) % rootsA.size();
+			size_t rB = ((now >> 14) ^ (now >> 28)) % rootsB.size();
+
+			whiteLeader = titlesA[iA] + " " + rootsA[rA];
+			blackLeader = titlesB[iB] + " " + rootsB[rB];
+			if (whiteLeader == blackLeader)
+			{
+				blackLeader = titlesB[(iB + 1) % titlesB.size()] + " " + rootsB[(rB + 1) % rootsB.size()];
+			}
+		}
+
 		static void extractLeaderNames(const std::string& premise, std::string& whiteLeader, std::string& blackLeader)
 		{
-			const std::vector<std::string> delimiters = {" vs. ", " vs ", " versus ", " against ", " and "};
+			const std::vector<std::string> delimiters = {" vs. ", " vs ",	  " vs. \n",   " vs\n", " VS ",
+														 " Vs ",  " versus ", " against ", " and ", "\n- ",
+														 "\n2. ", "\n",		  " / ",	   " - "};
 
 			size_t sepPos = std::string::npos;
 			size_t sepLen = 0;
@@ -773,7 +1113,11 @@ namespace wchess
 						"Two opposing sides prepared for their decisive clash as ",
 						"Two rivals, ",
 						"Two contenders, ",
-						"Between "};
+						"Between ",
+						"1. ",
+						"2. ",
+						"- ",
+						"* "};
 					for (const auto& op : openingPhrases)
 					{
 						if (s.find(op) == 0)
@@ -808,43 +1152,6 @@ namespace wchess
 						s.pop_back();
 					}
 
-					const std::vector<std::string> titles = {"Commander ",
-															 "Admiral ",
-															 "Fleet Commander ",
-															 "Warlord ",
-															 "Agent ",
-															 "Ghost Operative ",
-															 "Rogue Operative ",
-															 "Commodore ",
-															 "Captain ",
-															 "High Archmage ",
-															 "Void Conjurer ",
-															 "Wasteland Raider ",
-															 "Iron Citadel Marshal ",
-															 "Marshal ",
-															 "Grand Inquisitor ",
-															 "Inquisitor ",
-															 "Rebel Leader ",
-															 "Sky Captain ",
-															 "Corsair Captain ",
-															 "Lord ",
-															 "Duke ",
-															 "General ",
-															 "Chef ",
-															 "Dr. ",
-															 "Doctor ",
-															 "Detective ",
-															 "Artist ",
-															 "Inventor "};
-					for (const auto& t : titles)
-					{
-						if (s.find(t) == 0)
-						{
-							s = s.substr(t.size());
-							break;
-						}
-					}
-
 					size_t commaPos = s.find(", ");
 					if (commaPos != std::string::npos && commaPos < s.size() - 2)
 					{
@@ -871,8 +1178,8 @@ namespace wchess
 						}
 					}
 
-					size_t start = s.find_first_not_of(" \"\'");
-					size_t end = s.find_last_not_of(" \"\'");
+					size_t start = s.find_first_not_of(" \"\'*`");
+					size_t end = s.find_last_not_of(" \"\'*`");
 					if (start != std::string::npos && end != std::string::npos)
 						s = s.substr(start, end - start + 1);
 
@@ -886,7 +1193,7 @@ namespace wchess
 
 				auto isValidEntityName = [](const std::string& name) -> bool
 				{
-					if (name.empty() || name.size() > 24)
+					if (name.empty() || name.size() > 30)
 						return false;
 					if (name.find('"') != std::string::npos || name.find('?') != std::string::npos ||
 						name.find('!') != std::string::npos || name.find('.') != std::string::npos ||
@@ -918,20 +1225,19 @@ namespace wchess
 		static std::string describePieceAction(const MoveAnnotation& ann, const std::string& moverName,
 											   const std::string& enemyName)
 		{
+			(void)moverName;
 			if (ann.move.isCastling)
 			{
-				return moverName + " shifted into a fortified defensive position.";
+				return "shifted into a fortified defensive redoubt, locking down the rear position.";
 			}
 
 			if (ann.tactics.checkmate)
 			{
-				return moverName + " delivered the decisive finishing blow - " + enemyName +
-					   " had nowhere left to run.";
+				return "struck the decisive finishing blow - " + enemyName + " had no escape.";
 			}
 			if (ann.tactics.check)
 			{
-				return moverName + " launched a direct strike at " + enemyName +
-					   ", forcing an urgent defensive scramble.";
+				return "launched a direct assault against " + enemyName + ", forcing an urgent defensive scramble.";
 			}
 			if (ann.hasCapture || ann.move.isCapture)
 			{
@@ -956,106 +1262,175 @@ namespace wchess
 				int movVal = pieceValue(ann.pieceMoved);
 
 				if (ann.pieceCaptured == PieceType::Queen && capVal > movVal)
-					return moverName + " struck down " + enemyName +
-						   " most formidable champion, landing a catastrophic blow to their forces.";
+					return "struck down " + enemyName + "'s flagship champion in a devastating strike.";
 
 				if (capVal > movVal)
-					return moverName + " executed a precise strike, taking down a superior opposing unit.";
+					return "executed a calculated strike, eliminating a superior " + enemyName + " detachment.";
 				else if (capVal == movVal && capVal >= 3)
-					return moverName + " clashed directly with " + enemyName + " in an even exchange of forces.";
+					return "clashed directly with " + enemyName + " in an even exchange of heavy forces.";
 				else if (capVal >= 3)
-					return moverName + " landed a solid hit against " + enemyName + " defenses.";
+					return "breached " + enemyName + "'s defensive perimeter, taking out an important outpost.";
 
-				return moverName + " chipped away at " + enemyName + " outer perimeter.";
+				return "chipped away at " + enemyName + "'s forward screen, claiming a frontline position.";
 			}
 			if (ann.tactics.fork || ann.tactics.skewer)
 			{
-				return moverName + " created a tactical dilemma, threatening multiple positions at once.";
+				return "executed a dual-pronged strike, threatening multiple " + enemyName + " positions at once.";
 			}
 			if (ann.tactics.pin)
 			{
-				return moverName + " pinned " + enemyName + " in place, restricting their movement.";
+				return "pinned " + enemyName + "'s forces in place, severely restricting their movement.";
 			}
 
-			// Opening phase (moves 1-3 without captures): grounded development descriptions
-			if (ann.fullMoveNumber <= 3 && ann.pieceMoved == PieceType::Pawn)
+			// Piece-specific actions based on move quality and piece type:
+			uint32_t seedIdx = static_cast<uint32_t>(ann.fullMoveNumber * 7 + static_cast<int>(ann.pieceMoved) * 11 +
+													 static_cast<int>(ann.quality) * 17);
+
+			if (ann.pieceMoved == PieceType::Pawn)
 			{
-				int op = static_cast<int>(ann.move.to.file + ann.fullMoveNumber) % 3;
 				if (ann.quality == MoveQuality::Best || ann.quality == MoveQuality::Excellent)
 				{
-					const char* pOpts[] = {" stepped forward to establish a presence in the center.",
-										   " advanced a vanguard unit to secure ground.",
-										   " claimed forward space with disciplined positioning."};
-					return moverName + std::string(pOpts[op]);
+					const char* opts[] = {"advanced a vanguard unit to secure central ground.",
+										  "claimed forward space with disciplined positioning.",
+										  "anchored the frontline formation with steady momentum.",
+										  "pushed infantry forward to establish an assertive presence."};
+					return std::string(opts[seedIdx % 4]);
 				}
 				if (ann.quality == MoveQuality::Good)
 				{
-					const char* pOpts[] = {" stepped forward into the field.",
-										   " pushed a forward scout to test the perimeter.",
-										   " staked an opening claim on the forward line."};
-					return moverName + std::string(pOpts[op]);
+					const char* opts[] = {"pushed a forward scout to test the perimeter.",
+										  "staked an opening claim on the forward line.",
+										  "stepped forward steadily to gauge the distance.",
+										  "advanced frontline pickets toward the middle zone."};
+					return std::string(opts[seedIdx % 4]);
 				}
 				if (ann.quality == MoveQuality::Inaccuracy)
 				{
-					return moverName + " pushed forward on an unconventional flank angle.";
+					return "pushed forward on an unconventional flank angle, leaving an awkward gap.";
 				}
 				if (ann.quality == MoveQuality::Mistake)
 				{
-					return moverName + " pushed aggressively on the flank, creating an early gap.";
+					return "overextended on the flank, exposing a weak seam in the vanguard.";
+				}
+			}
+			else if (ann.pieceMoved == PieceType::Knight)
+			{
+				if (ann.quality == MoveQuality::Best || ann.quality == MoveQuality::Excellent)
+				{
+					const char* opts[] = {"maneuvered swift mobile riders into an active forward post.",
+										  "dispatched a flexible detachment to command key intersection angles.",
+										  "repositioned mobile cavalry to threaten the enemy flank."};
+					return std::string(opts[seedIdx % 3]);
+				}
+				if (ann.quality == MoveQuality::Good)
+				{
+					const char* opts[] = {"steered mobile units along the contested flank.",
+										  "shifted cavalry inward to support the main body."};
+					return std::string(opts[seedIdx % 2]);
+				}
+			}
+			else if (ann.pieceMoved == PieceType::Bishop)
+			{
+				if (ann.quality == MoveQuality::Best || ann.quality == MoveQuality::Excellent)
+				{
+					const char* opts[] = {"opened long-range sightlines across the open diagonal.",
+										  "positioned sharpshooters with a clear view across the field.",
+										  "established an aggressive diagonal corridor pointing toward enemy lines."};
+					return std::string(opts[seedIdx % 3]);
+				}
+				if (ann.quality == MoveQuality::Good)
+				{
+					const char* opts[] = {"developed long-range support along the open diagonal.",
+										  "shifted firing lines to cover the central expanse."};
+					return std::string(opts[seedIdx % 2]);
+				}
+			}
+			else if (ann.pieceMoved == PieceType::Rook)
+			{
+				if (ann.quality == MoveQuality::Best || ann.quality == MoveQuality::Excellent)
+				{
+					const char* opts[] = {"brought heavy artillery into position along an open file.",
+										  "seized control of a critical transit channel with heavy support.",
+										  "aligned heavy batteries to command the direct pathway."};
+					return std::string(opts[seedIdx % 3]);
+				}
+			}
+			else if (ann.pieceMoved == PieceType::Queen)
+			{
+				if (ann.quality == MoveQuality::Best || ann.quality == MoveQuality::Excellent)
+				{
+					const char* opts[] = {"deployed the flagship champion into high-threat territory.",
+										  "commanded the central field with an imposing show of force.",
+										  "realigned elite vanguard forces to pressure multiple fronts."};
+					return std::string(opts[seedIdx % 3]);
 				}
 			}
 
-			// General quality-based descriptions with random variants for variety
-			int v = static_cast<int>(ann.fullMoveNumber + static_cast<int>(ann.pieceMoved)) % 3;
+			// General quality-based descriptions
 			switch (ann.quality)
 			{
 				case MoveQuality::Best:
 				{
-					const char* opts[] = {" executed a precise, disciplined maneuver.",
-										  " secured a clean, well-positioned foothold.",
-										  " strengthened their posture across the field."};
-					return moverName + std::string(opts[v]);
+					const char* opts[] = {"executed a precise, calculated maneuver to gain positional advantage.",
+										  "secured a clean, well-fortified foothold in the field.",
+										  "strengthened overall command across the theater.",
+										  "optimized formation lines with disciplined tactical poise."};
+					return std::string(opts[seedIdx % 4]);
 				}
 				case MoveQuality::Excellent:
 				{
-					const char* opts[] = {" advanced with calculated efficiency.",
-										  " adjusted their approach with steady control.",
-										  " claimed valuable ground across the line."};
-					return moverName + std::string(opts[v]);
+					const char* opts[] = {"advanced with sharp efficiency, tightening control.",
+										  "adjusted deployment with steady, confident precision.",
+										  "claimed valuable territory across the contested boundary."};
+					return std::string(opts[seedIdx % 3]);
 				}
 				case MoveQuality::Good:
 				{
-					const char* opts[] = {" probed the perimeter of %s with a cautious step.",
-										  " advanced steadily, keeping watch on %s.",
-										  " shifted their focus, preparing for the next development with %s."};
-					char buf[160];
-					snprintf(buf, sizeof(buf), opts[v], enemyName.c_str());
-					return moverName + std::string(buf);
+					const char* opts[] = {"surveyed enemy lines with a cautious advance.",
+										  "advanced steadily, maintaining watchful coverage over opposing units.",
+										  "realigned formation to prepare for the next tactical phase."};
+					return std::string(opts[seedIdx % 3]);
 				}
 				case MoveQuality::Inaccuracy:
 				{
-					const char* opts[] = {" drifted slightly wide of standard alignment.",
-										  " hesitated, stepping slightly out of position.",
-										  " misjudged the angle, making a minor positional concession."};
-					return moverName + std::string(opts[v]);
+					const char* opts[] = {"drifted slightly off optimal formation, yielding minor positioning.",
+										  "hesitated momentarily, stepping into an awkward alignment.",
+										  "misjudged the closing distance, making a slight concession."};
+					return std::string(opts[seedIdx % 3]);
 				}
 				case MoveQuality::Mistake:
 				{
-					const char* opts[] = {" overextended, leaving a visible gap in their formation.",
-										  " stumbled in their deployment, giving up ground.",
-										  " conceded valuable positioning to %s."};
-					char buf[160];
-					snprintf(buf, sizeof(buf), opts[v], enemyName.c_str());
-					return moverName + std::string(buf);
+					const char* opts[] = {"overextended recklessly, opening a visible vulnerability.",
+										  "stumbled in deployment, giving up hard-fought ground.",
+										  "conceded critical positioning to opposing forces."};
+					return std::string(opts[seedIdx % 3]);
 				}
 				case MoveQuality::Blunder:
 					if (ann.pieceMoved == PieceType::Queen)
-						return moverName + " sent their most formidable champion forward into a reckless, fatal trap.";
-					return moverName + " made a severe misjudgment, leaving their lines dangerously exposed.";
+						return "sent their flagship champion directly into a fatal, catastrophic trap.";
+					return "committed a severe tactical blunder, leaving defenses dangerously compromised.";
 				case MoveQuality::Miss:
-					return moverName + " hesitated at a key moment, letting a tactical opening slip away.";
+					return "hesitated at the critical moment, allowing a decisive opening to slip away.";
 				default:
-					return moverName + " shifted their position on the field.";
+					return "shifted position across the contested field.";
+			}
+		}
+
+		static std::string formatTurnFallbackProse(const std::optional<MoveAnnotation>& whiteAnn,
+												   const MoveAnnotation& blackAnn, const std::string& whiteLeader,
+												   const std::string& blackLeader)
+		{
+			if (whiteAnn.has_value())
+			{
+				std::string wDesc = describePieceAction(*whiteAnn, whiteLeader, blackLeader);
+				std::string bDesc = describePieceAction(blackAnn, blackLeader, whiteLeader);
+				return whiteLeader + " " + wDesc + " Meanwhile, " + blackLeader + " " + bDesc;
+			}
+			else
+			{
+				const std::string mover = blackAnn.mover == Color::White ? whiteLeader : blackLeader;
+				const std::string enemy = blackAnn.mover == Color::White ? blackLeader : whiteLeader;
+				return mover + " " + describePieceAction(blackAnn, mover, enemy);
 			}
 		}
 
@@ -1068,13 +1443,13 @@ namespace wchess
 			{
 				std::string wDesc = describePieceAction(*whiteAnn, whiteLeader, blackLeader);
 				std::string bDesc = describePieceAction(blackAnn, blackLeader, whiteLeader);
-				out = wDesc + " " + bDesc;
+				out = "- " + whiteLeader + ": " + wDesc + "\n- " + blackLeader + ": " + bDesc;
 			}
 			else
 			{
 				const std::string mover = blackAnn.mover == Color::White ? whiteLeader : blackLeader;
 				const std::string enemy = blackAnn.mover == Color::White ? blackLeader : whiteLeader;
-				out = describePieceAction(blackAnn, mover, enemy);
+				out = "- " + mover + ": " + describePieceAction(blackAnn, mover, enemy);
 			}
 			return out;
 		}
@@ -1098,19 +1473,60 @@ namespace wchess
 		std::string formatChatPrompt(const std::string& systemMsg, const std::string& userMsg) const
 		{
 			const char* chatTemplate = (m_model != nullptr) ? llama_model_chat_template(m_model, nullptr) : nullptr;
-			std::string tmpl = (chatTemplate != nullptr) ? std::string(chatTemplate) : "";
+			if (chatTemplate != nullptr)
+			{
+				// 1. Try applying model's native template with separate system and user messages
+				std::vector<llama_chat_message> msgs;
+				if (!systemMsg.empty())
+				{
+					msgs.push_back({"system", systemMsg.c_str()});
+				}
+				msgs.push_back({"user", userMsg.c_str()});
 
-			if (tmpl.find("<|turn>") != std::string::npos || tmpl.find("<turn|>") != std::string::npos)
-			{
+				int32_t needed = llama_chat_apply_template(chatTemplate, msgs.data(), msgs.size(), true, nullptr, 0);
+				if (needed > 0)
+				{
+					std::string formatted(static_cast<size_t>(needed + 1), '\0');
+					int32_t written =
+						llama_chat_apply_template(chatTemplate, msgs.data(), msgs.size(), true, formatted.data(),
+												  static_cast<int32_t>(formatted.size()));
+					if (written > 0)
+					{
+						formatted.resize(static_cast<size_t>(written));
+						return formatted;
+					}
+				}
+
+				// 2. If system role is not supported by the template (e.g. Gemma 1/2/4), combine system + user into
+				// single user message
 				std::string combinedUser = systemMsg.empty() ? userMsg : (systemMsg + "\n\n" + userMsg);
-				return "<|turn>user\n" + combinedUser + "<turn|>\n<|turn>model\n";
+				llama_chat_message userOnlyMsg = {"user", combinedUser.c_str()};
+				needed = llama_chat_apply_template(chatTemplate, &userOnlyMsg, 1, true, nullptr, 0);
+				if (needed > 0)
+				{
+					std::string formatted(static_cast<size_t>(needed + 1), '\0');
+					int32_t written = llama_chat_apply_template(chatTemplate, &userOnlyMsg, 1, true, formatted.data(),
+																static_cast<int32_t>(formatted.size()));
+					if (written > 0)
+					{
+						formatted.resize(static_cast<size_t>(written));
+						return formatted;
+					}
+				}
 			}
-			else if (tmpl.find("start_of_turn") != std::string::npos || tmpl.find("gemma") != std::string::npos)
+
+			// 3. Fallback to model-family explicit formatting
+			std::string tmpl = (chatTemplate != nullptr) ? std::string(chatTemplate) : "";
+			std::string combinedUser = systemMsg.empty() ? userMsg : (systemMsg + "\n\n" + userMsg);
+
+			if (tmpl.find("start_of_turn") != std::string::npos || tmpl.find("gemma") != std::string::npos ||
+				m_loadedPath.find("gemma") != std::string::npos || m_loadedPath.find("Gemma") != std::string::npos)
 			{
-				std::string combinedUser = systemMsg.empty() ? userMsg : (systemMsg + "\n\n" + userMsg);
 				return "<start_of_turn>user\n" + combinedUser + "<end_of_turn>\n<start_of_turn>model\n";
 			}
-			else if (tmpl.find("<|start_header_id|>") != std::string::npos)
+			else if (tmpl.find("<|start_header_id|>") != std::string::npos ||
+					 m_loadedPath.find("llama-3") != std::string::npos ||
+					 m_loadedPath.find("Llama-3") != std::string::npos)
 			{
 				std::string s = "<|begin_of_text|>";
 				if (!systemMsg.empty())
@@ -1128,12 +1544,12 @@ namespace wchess
 
 		std::string buildContextPrompt(const std::string& dramaticEvent, int maxTokens, const std::string& leadActor)
 		{
-			// Target token budget for the context prompt
-			// Reserve ~150 tokens for the system prompt, ChatML tags, and the dramaticEvent itself.
-			int targetHistoryTokens = std::max(48, static_cast<int>(m_ctxCapacity) - maxTokens - 150);
+			(void)leadActor;
+			// Target token budget for the context prompt with 2048 token capacity
+			int targetHistoryTokens = std::max(128, static_cast<int>(m_ctxCapacity) - maxTokens - 250);
 
 			int premiseTokens = countTokens(m_activePremise);
-			targetHistoryTokens = std::max(24, targetHistoryTokens - premiseTokens);
+			targetHistoryTokens = std::max(64, targetHistoryTokens - premiseTokens);
 
 			std::string historyStr;
 			int currentHistoryTokens = 0;
@@ -1143,7 +1559,7 @@ namespace wchess
 				if (currentHistoryTokens + lineTokens > targetHistoryTokens)
 					break;
 				if (!historyStr.empty())
-					historyStr = (*it) + " " + historyStr;
+					historyStr = (*it) + "\n" + historyStr;
 				else
 					historyStr = *it;
 				currentHistoryTokens += lineTokens;
@@ -1153,30 +1569,94 @@ namespace wchess
 			const char* chatTemplate = (model != nullptr) ? llama_model_chat_template(model, nullptr) : nullptr;
 			if (chatTemplate != nullptr)
 			{
+				std::string settingContext = m_setting.empty() ? "" : (" (" + m_setting + ")");
 				std::string systemMsg =
-					"You are a narrator chronicling a rivalry between " + m_whiteLeader + " and " + m_blackLeader +
-					". "
-					"Write ONE concise, grounded sentence narrating this turn. "
-					"Match the true scale of the action: quiet maneuvers and opening moves are subtle, cautious, and "
-					"measured (positioning, scouting, testing defenses). "
-					"Save explosive combat, heavy damage, and reeling defenses strictly for direct captures, checks, "
-					"and major blunders. "
-					"Do not invent new combat actions beyond what just happened. Never mention chess.";
+					"You are a vivid narrator chronicling the clash between " + m_whiteLeader + " and " +
+					m_blackLeader + settingContext +
+					".\n"
+					"Write ONE concise, grounded sentence narrating this turn. Ground all actions in the specific elements of the setting.\n"
+					"Match the true scale of the action: opening moves are subtle, cautious, and measured. "
+					"Save dramatic turning points, major blunders, and significant setbacks strictly for direct captures, checks, "
+					"and critical mistakes.\n"
+					"Each actor performed their respective action. Do not mix up who acted. "
+					"Use fresh, varied phrasing and avoid repeating stock phrases from previous turns. "
+					"Do not invent new major events beyond what just happened. Never mention chess terms.";
 
-				std::string userMsg = "Rivals: " + m_whiteLeader + " vs " + m_blackLeader +
-									  "\n"
-									  "Story so far:\n" +
-									  m_activePremise;
+				std::string userMsg = "Rivals: " + m_whiteLeader + " vs " + m_blackLeader + "\n";
+				if (!m_setting.empty())
+					userMsg += "Setting: " + m_setting + "\n";
+				userMsg += "Story so far:\n" + m_activePremise;
 				if (!historyStr.empty())
 					userMsg += "\n" + historyStr;
 				userMsg += "\n\nWhat just happened:\n" + dramaticEvent +
-						   "\n\nWrite ONE grounded sentence capturing this exchange:";
+						   "\n\nWrite ONE grounded sentence capturing this exchange in this setting:";
 
 				return formatChatPrompt(systemMsg, userMsg);
 			}
 			else
 			{
-				std::string prompt = "Continue the story calmly. ";
+				std::string prompt = "Continue the story in the setting (" + m_setting + "). ";
+				if (!m_activePremise.empty())
+					prompt += m_activePremise + " ";
+				if (!historyStr.empty())
+					prompt += historyStr + " ";
+				prompt += dramaticEvent + " ";
+				return prompt;
+			}
+		}
+
+		std::string buildClimaxPrompt(const std::string& dramaticEvent, int maxTokens, const MoveAnnotation& ann)
+		{
+			int targetHistoryTokens = std::max(128, static_cast<int>(m_ctxCapacity) - maxTokens - 250);
+
+			int premiseTokens = countTokens(m_activePremise);
+			targetHistoryTokens = std::max(64, targetHistoryTokens - premiseTokens);
+
+			std::string historyStr;
+			int currentHistoryTokens = 0;
+			for (auto it = m_storyHistory.rbegin(); it != m_storyHistory.rend(); ++it)
+			{
+				int lineTokens = countTokens(*it);
+				if (currentHistoryTokens + lineTokens > targetHistoryTokens)
+					break;
+				if (!historyStr.empty())
+					historyStr = (*it) + "\n" + historyStr;
+				else
+					historyStr = *it;
+				currentHistoryTokens += lineTokens;
+			}
+
+			std::string winner = (ann.mover == Color::White) ? m_whiteLeader : m_blackLeader;
+			std::string loser = (ann.mover == Color::White) ? m_blackLeader : m_whiteLeader;
+
+			const struct llama_model* model = llama_get_model(m_ctx);
+			const char* chatTemplate = (model != nullptr) ? llama_model_chat_template(model, nullptr) : nullptr;
+			if (chatTemplate != nullptr)
+			{
+				std::string settingContext = m_setting.empty() ? "" : (" (" + m_setting + ")");
+				std::string systemMsg =
+					"You are a master storyteller bringing the conflict between " + winner + " and " + loser +
+					settingContext + " to its decisive climax.\n" + winner +
+					" has delivered the final blow and won the match.\n"
+					"Write 2-3 vivid, dramatic sentences depicting the final victory, the defeat of " +
+					loser +
+					", and the resolution of their confrontation in a way that fits this specific setting.\n"
+					"Never mention chess terms.";
+
+				std::string userMsg = "Rivals: " + winner + " (Victor) vs " + loser + " (Defeated)\n";
+				if (!m_setting.empty())
+					userMsg += "Setting: " + m_setting + "\n";
+				userMsg += "Story so far:\n" + m_activePremise;
+				if (!historyStr.empty())
+					userMsg += "\n" + historyStr;
+				userMsg += "\n\nDecisive Climax:\n" + dramaticEvent +
+						   "\n\nWrite 2-3 dramatic concluding sentences resolving the conflict:";
+
+				return formatChatPrompt(systemMsg, userMsg);
+			}
+			else
+			{
+				std::string prompt = "The conflict concludes decisively in favor of " + winner + " (" + m_setting + "). ";
 				if (!m_activePremise.empty())
 					prompt += m_activePremise + " ";
 				if (!historyStr.empty())
@@ -1208,23 +1688,6 @@ namespace wchess
 				return "";
 
 			tokens.resize(static_cast<size_t>(n_tokens));
-
-			// Penalize recent story history explicitly to prevent repetitive output.
-			// We avoid penalizing the raw prompt tokens from the end because that would penalize the 'dramaticEvent',
-			// forcing the model to hallucinate contradictory words to escape the penalty.
-			int beatsToPenalize = std::min<int>(static_cast<int>(m_storyHistory.size()), 5);
-			for (size_t i = m_storyHistory.size() - beatsToPenalize; i < m_storyHistory.size(); ++i)
-			{
-				const std::string& beat = m_storyHistory[i];
-				std::vector<llama_token> hTokens(beat.size() + 16);
-				int hn = llama_tokenize(m_vocab, beat.c_str(), static_cast<int32_t>(beat.size()), hTokens.data(),
-										static_cast<int32_t>(hTokens.size()), false, false);
-				if (hn > 0)
-				{
-					for (int k = 0; k < hn; ++k)
-						llama_sampler_accept(m_sampler, hTokens[k]);
-				}
-			}
 
 			// KV Cache Prefix Reuse: check how many prompt tokens match the cached KV prefix
 			size_t commonPrefix = 0;
@@ -1272,6 +1735,28 @@ namespace wchess
 			std::string streamPieceBuffer;
 			bool isFirstPiece = true;
 
+			const std::vector<std::string> stopTags = {"<end_of_turn>",
+													   "</end_of_turn>",
+													   "<start_of_turn>",
+													   "</start_of_turn>",
+													   "<start_of_turn>user",
+													   "<start_of_turn>model",
+													   "<|im_end|>",
+													   "<|im_start|>",
+													   "<|eot_id|>",
+													   "<|start_header_id|>",
+													   "<|end_header_id|>",
+													   "<|begin_of_text|>",
+													   "<|end_of_text|>",
+													   "<eos>",
+													   "<bos>",
+													   "<s>",
+													   "</s>",
+													   "<turn_end>",
+													   "<turn_start>",
+													   "[INST]",
+													   "[/INST]"};
+
 			for (int i = 0; i < maxTokens; ++i)
 			{
 				if (m_cancel.load())
@@ -1280,14 +1765,51 @@ namespace wchess
 				llama_token token = llama_sampler_sample(m_sampler, m_ctx, -1);
 				llama_sampler_accept(m_sampler, token);
 
-				if (llama_vocab_is_eog(m_vocab, token))
+				if (token == LLAMA_TOKEN_NULL)
 					break;
+
+				if (llama_vocab_is_eog(m_vocab, token) || llama_vocab_is_control(m_vocab, token) ||
+					token == llama_vocab_eot(m_vocab) || token == llama_vocab_eos(m_vocab))
+				{
+					break;
+				}
 
 				int n_piece = llama_token_to_piece(m_vocab, token, pieceBuf, sizeof(pieceBuf), 0, false);
 				if (n_piece > 0)
 				{
 					std::string piece(pieceBuf, static_cast<size_t>(n_piece));
+
+					// Check if piece contains special/control token markers
+					bool hasStopTag = false;
+					for (const auto& tag : stopTags)
+					{
+						if (piece.find(tag) != std::string::npos)
+						{
+							hasStopTag = true;
+							break;
+						}
+					}
+					if (hasStopTag)
+						break;
+
 					result += piece;
+
+					// Check if accumulated result contains any stop tags
+					size_t tagPos = std::string::npos;
+					for (const auto& tag : stopTags)
+					{
+						size_t pos = result.find(tag);
+						if (pos != std::string::npos)
+						{
+							if (tagPos == std::string::npos || pos < tagPos)
+								tagPos = pos;
+						}
+					}
+					if (tagPos != std::string::npos)
+					{
+						result = result.substr(0, tagPos);
+						break;
+					}
 
 					if (stream != nullptr)
 					{
@@ -1411,7 +1933,7 @@ namespace wchess
 		llama_context* m_ctx = nullptr;
 		llama_sampler* m_sampler = nullptr;
 		std::string m_loadedPath;
-		uint32_t m_ctxCapacity = 512;
+		uint32_t m_ctxCapacity = 2048;
 
 		std::string m_device = "cpu";
 		int m_gpuLayers = 99;
@@ -1419,6 +1941,7 @@ namespace wchess
 		int m_threadCount = 4;
 		std::string m_configuredPremise;
 		std::string m_activePremise;
+		std::string m_setting = "in an intense clash";
 		std::string m_whiteLeader = "White";
 		std::string m_blackLeader = "Black";
 		std::vector<std::string> m_storyHistory;
