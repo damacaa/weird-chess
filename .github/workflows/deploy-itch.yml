@@ -40,6 +40,8 @@ jobs:
             -DUSE_LOCAL_WEIRD_ENGINE=OFF \
             -DWEIRDCHESS_BUILD_TESTS=OFF \
             -DLLAMA_WASM_MEM64=OFF \
+            -DHAVE_RECURSIVE_MUTEXES=1 \
+            -DSDL_THREAD_PTHREAD_RECURSIVE_MUTEX=1 \
             -DCMAKE_C_FLAGS="-pthread" \
             -DCMAKE_CXX_FLAGS="-pthread" \
             -DCMAKE_EXECUTABLE_SUFFIX=".html" \

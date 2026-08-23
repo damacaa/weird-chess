@@ -35,6 +35,9 @@ if(EMSCRIPTEN OR BUILD_WEB)
     set(BUILD_WEB ON)
     set(DEPLOY_STANDALONE ON CACHE BOOL "" FORCE)
     set(DEPLOY_STANDALONE ON)
+    set(HAVE_PTHREADS 1 CACHE BOOL "" FORCE)
+    set(HAVE_RECURSIVE_MUTEXES 1 CACHE BOOL "" FORCE)
+    set(SDL_THREAD_PTHREAD_RECURSIVE_MUTEX 1 CACHE BOOL "" FORCE)
 endif()
 
 if(DEPLOY_STANDALONE)
@@ -75,6 +78,10 @@ if(NOT TARGET WeirdEngine)
 else()
     # WeirdEngine already defined (built from root); resolve its source path
     get_filename_component(WEIRD_ENGINE_REAL_SOURCE "${WEIRD_ENGINE_LOCAL_PATH}" ABSOLUTE)
+endif()
+
+if(TARGET SDL3-static)
+    target_compile_definitions(SDL3-static PRIVATE SDL_THREAD_PTHREAD_RECURSIVE_MUTEX=1)
 endif()
 
 # -------------------------------------------------------------------------
