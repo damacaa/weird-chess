@@ -125,7 +125,7 @@ set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     llama
-    URL https://github.com/ggml-org/llama.cpp/archive/refs/tags/b4500.tar.gz
+    URL https://github.com/ggml-org/llama.cpp/archive/refs/tags/b4710.tar.gz
 )
 FetchContent_MakeAvailable(llama)
 

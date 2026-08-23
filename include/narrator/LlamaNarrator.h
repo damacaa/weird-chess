@@ -130,7 +130,8 @@ namespace wchess
 			std::string text = raw;
 
 			// Replace UTF-8 multi-byte punctuation before single-byte filtering
-			auto replaceAll = [](std::string& str, const std::string& from, const std::string& to) {
+			auto replaceAll = [](std::string& str, const std::string& from, const std::string& to)
+			{
 				size_t startPos = 0;
 				while ((startPos = str.find(from, startPos)) != std::string::npos)
 				{
@@ -139,14 +140,14 @@ namespace wchess
 				}
 			};
 
-			replaceAll(text, "\xE2\x80\x98", "");   // ‘
-			replaceAll(text, "\xE2\x80\x99", "");   // ’
-			replaceAll(text, "\xE2\x80\x9C", "\""); // “
-			replaceAll(text, "\xE2\x80\x9D", "\""); // ”
-			replaceAll(text, "\xE2\x80\x93", "-");  // en-dash
-			replaceAll(text, "\xE2\x80\x94", "-");  // em-dash
-			replaceAll(text, "\xE2\x80\xA6", "...");// …
-			replaceAll(text, "'", "");              // strip standard apostrophes per engine charset rule
+			replaceAll(text, "\xE2\x80\x98", "");	 // ‘
+			replaceAll(text, "\xE2\x80\x99", "");	 // ’
+			replaceAll(text, "\xE2\x80\x9C", "\"");	 // “
+			replaceAll(text, "\xE2\x80\x9D", "\"");	 // ”
+			replaceAll(text, "\xE2\x80\x93", "-");	 // en-dash
+			replaceAll(text, "\xE2\x80\x94", "-");	 // em-dash
+			replaceAll(text, "\xE2\x80\xA6", "..."); // …
+			replaceAll(text, "'", "");				 // strip standard apostrophes per engine charset rule
 
 			std::string out;
 			out.reserve(text.size());
@@ -160,9 +161,8 @@ namespace wchess
 				{
 					out += c;
 				}
-				else if (c == '!' || c == '"' || c == '&' || c == '_' || c == '*' || c == '(' || c == ')' ||
-						 c == '-' || c == '=' || c == '+' || c == '?' || c == '|' || c == '.' || c == ',' ||
-						 c == ':' || c == ';')
+				else if (c == '!' || c == '"' || c == '&' || c == '_' || c == '*' || c == '(' || c == ')' || c == '-' ||
+						 c == '=' || c == '+' || c == '?' || c == '|' || c == '.' || c == ',' || c == ':' || c == ';')
 				{
 					out += c;
 				}
@@ -175,9 +175,8 @@ namespace wchess
 			}
 
 			// Remove leading hallucinated prefix tags
-			const std::vector<std::string> prefixes = {
-				"Story:", "Story :", "Continuation:", "Narrator:", "Paragraph:", "Assistant:", "assistant:", "Response:"
-			};
+			const std::vector<std::string> prefixes = {"Story:",	 "Story :",	   "Continuation:", "Narrator:",
+													   "Paragraph:", "Assistant:", "assistant:",	"Response:"};
 			for (const auto& prefix : prefixes)
 			{
 				size_t p = out.find(prefix);
@@ -232,10 +231,16 @@ namespace wchess
 			if (text.empty())
 				return "";
 
-			auto balanceQuotes = [](std::string s) {
+			auto balanceQuotes = [](std::string s)
+			{
 				size_t quotes = 0;
-				for (char c : s) { if (c == '"') quotes++; }
-				if (quotes % 2 != 0) s += '"';
+				for (char c : s)
+				{
+					if (c == '"')
+						quotes++;
+				}
+				if (quotes % 2 != 0)
+					s += '"';
 				return s;
 			};
 
@@ -283,8 +288,8 @@ namespace wchess
 			}
 
 			auto fileSize = std::filesystem::file_size(modelPath, ec);
-			WeirdEngine::Logger::log("[LlamaNarrator] Initializing GGUF model: " + modelPath +
-									 " (" + std::to_string(fileSize / (1024 * 1024)) + " MB)");
+			WeirdEngine::Logger::log("[LlamaNarrator] Initializing GGUF model: " + modelPath + " (" +
+									 std::to_string(fileSize / (1024 * 1024)) + " MB)");
 
 			unload();
 			m_cancel.store(false);
@@ -300,7 +305,8 @@ namespace wchess
 			m_model = llama_model_load_from_file(modelPath.c_str(), modelParams);
 			if (!m_model)
 			{
-				WeirdEngine::Logger::error("[LlamaNarrator] Error: llama_model_load_from_file failed for: " + modelPath);
+				WeirdEngine::Logger::error("[LlamaNarrator] Error: llama_model_load_from_file failed for: " +
+										   modelPath);
 				return false;
 			}
 
@@ -335,11 +341,12 @@ namespace wchess
 			initSampler();
 
 			m_loadedPath = modelPath;
-			WeirdEngine::Logger::log("[LlamaNarrator] GGUF model ready (n_ctx=" + std::to_string(m_ctxCapacity) +
-									 ", threads=" + std::to_string(ctxParams.n_threads) +
-									 ", device=" + (useGpu ? ("gpu (" + std::to_string(modelParams.n_gpu_layers) + " layers)") : "cpu") +
-									 ", flash_attn=" + (ctxParams.flash_attn ? "true" : "false") +
-									 ", seed=" + (m_configuredSeed >= 0 ? std::to_string(m_configuredSeed) : "random") + ")");
+			WeirdEngine::Logger::log(
+				"[LlamaNarrator] GGUF model ready (n_ctx=" + std::to_string(m_ctxCapacity) +
+				", threads=" + std::to_string(ctxParams.n_threads) +
+				", device=" + (useGpu ? ("gpu (" + std::to_string(modelParams.n_gpu_layers) + " layers)") : "cpu") +
+				", flash_attn=" + (ctxParams.flash_attn ? "true" : "false") +
+				", seed=" + (m_configuredSeed >= 0 ? std::to_string(m_configuredSeed) : "random") + ")");
 			return true;
 		}
 
@@ -358,10 +365,10 @@ namespace wchess
 			llama_sampler_chain_add(m_sampler, llama_sampler_init_penalties(256, 1.25f, 0.0f, 0.0f));
 			llama_sampler_chain_add(m_sampler, llama_sampler_init_min_p(0.05f, 1));
 			llama_sampler_chain_add(m_sampler, llama_sampler_init_temp(0.85f));
-			uint32_t seed = (m_configuredSeed >= 0)
-								? static_cast<uint32_t>(m_configuredSeed)
-								: static_cast<uint32_t>(
-									  std::chrono::high_resolution_clock::now().time_since_epoch().count());
+			uint32_t seed =
+				(m_configuredSeed >= 0)
+					? static_cast<uint32_t>(m_configuredSeed)
+					: static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 			llama_sampler_chain_add(m_sampler, llama_sampler_init_dist(seed));
 		}
 
@@ -377,8 +384,8 @@ namespace wchess
 			std::string evalStr = AnnotationWriter::formatScore(ann.evalAfterCp);
 			int winPct = static_cast<int>(std::round(ann.winChanceAfter * 100.0f));
 
-			std::string result = colorStr + " played " + (ann.san.empty() ? "?" : ann.san) +
-								 " [" + qualityStr + " | eval: " + evalStr + " | win: " + std::to_string(winPct) + "%]";
+			std::string result = colorStr + " played " + (ann.san.empty() ? "?" : ann.san) + " [" + qualityStr +
+								 " | eval: " + evalStr + " | win: " + std::to_string(winPct) + "%]";
 			if (!ann.title.empty() && ann.title != qualityStr)
 				result += " (" + ann.title + ")";
 			return result;
@@ -394,9 +401,8 @@ namespace wchess
 
 			if (!isLoaded())
 			{
-				m_activePremise = m_configuredPremise.empty()
-									  ? std::string(ChessConfig::STORY_INTRO_PLACEHOLDER)
-									  : m_configuredPremise;
+				m_activePremise = m_configuredPremise.empty() ? std::string(ChessConfig::STORY_INTRO_PLACEHOLDER)
+															  : m_configuredPremise;
 				out.append(m_activePremise);
 				out.setStatus(StoryStatus::Idle);
 				WeirdEngine::Logger::log("==================== [Story Opening Premise] ====================");
@@ -414,21 +420,24 @@ namespace wchess
 				// Extract named entities from configured premise (e.g. "dog vs roomba" -> "Dog", "Roomba")
 				extractLeaderNames(m_configuredPremise, m_whiteLeader, m_blackLeader);
 
-				const char* chatTemplate = (m_model != nullptr) ? llama_model_chat_template(m_model) : nullptr;
+				const char* chatTemplate = (m_model != nullptr) ? llama_model_chat_template(m_model, nullptr) : nullptr;
 				bool isChat = (chatTemplate != nullptr);
 
 				if (isChat)
 				{
-					std::string systemMsg =
-						"You are a dramatic storyteller. The user will provide a story premise. "
-						"Write ONE vivid sentence to continue the story. "
-						"Mention both " + m_whiteLeader + " and " + m_blackLeader + " by name. "
-						"No chess terms.";
+					std::string systemMsg = "You are a dramatic storyteller. The user will provide a story premise. "
+											"Write ONE vivid sentence to continue the story. "
+											"Mention both " +
+											m_whiteLeader + " and " + m_blackLeader +
+											" by name. "
+											"No chess terms.";
 
-					std::string userMsg =
-						"Characters: " + m_whiteLeader + " and " + m_blackLeader + ".\n"
-						"Premise: " + m_configuredPremise + "\n"
-						"Write the next sentence to continue the story:";
+					std::string userMsg = "Characters: " + m_whiteLeader + " and " + m_blackLeader +
+										  ".\n"
+										  "Premise: " +
+										  m_configuredPremise +
+										  "\n"
+										  "Write the next sentence to continue the story:";
 
 					openingPrompt = "<|im_start|>system\n" + systemMsg + "<|im_end|>\n<|im_start|>user\n" + userMsg +
 									"<|im_end|>\n<|im_start|>assistant\n";
@@ -438,7 +447,8 @@ namespace wchess
 					{
 						if (displayPremise[0] >= 'a' && displayPremise[0] <= 'z')
 							displayPremise[0] = static_cast<char>(std::toupper(displayPremise[0]));
-						if (displayPremise.back() != '.' && displayPremise.back() != '!' && displayPremise.back() != '?' && displayPremise.back() != '"')
+						if (displayPremise.back() != '.' && displayPremise.back() != '!' &&
+							displayPremise.back() != '?' && displayPremise.back() != '"')
 							displayPremise += ".";
 					}
 
@@ -484,7 +494,7 @@ namespace wchess
 			else
 			{
 				// Pure AI generation for the opening story premise with structured genre seeds
-				const char* chatTemplate = (m_model != nullptr) ? llama_model_chat_template(m_model) : nullptr;
+				const char* chatTemplate = (m_model != nullptr) ? llama_model_chat_template(m_model, nullptr) : nullptr;
 				bool isChat = (chatTemplate != nullptr);
 
 				GenrePremise gp = pickRandomGenreSeed();
@@ -498,10 +508,12 @@ namespace wchess
 						"Mention both " +
 						m_whiteLeader + " and " + m_blackLeader + " by name. No chess terms.";
 
-					std::string userMsg =
-						"Characters: " + m_whiteLeader + " and " + m_blackLeader + ".\n"
-						"Setting: " + gp.setting + ".\n"
-						"Write the opening line of their clash:";
+					std::string userMsg = "Characters: " + m_whiteLeader + " and " + m_blackLeader +
+										  ".\n"
+										  "Setting: " +
+										  gp.setting +
+										  ".\n"
+										  "Write the opening line of their clash:";
 
 					openingPrompt = "<|im_start|>system\n" + systemMsg + "<|im_end|>\n<|im_start|>user\n" + userMsg +
 									"<|im_end|>\n<|im_start|>assistant\n";
@@ -530,7 +542,8 @@ namespace wchess
 				}
 				else
 				{
-					fullIntro = m_whiteLeader + " and " + m_blackLeader + " met " + gp.setting + " for a decisive clash.";
+					fullIntro =
+						m_whiteLeader + " and " + m_blackLeader + " met " + gp.setting + " for a decisive clash.";
 				}
 				m_activePremise = fullIntro;
 				out.updateCurrentChunk(fullIntro);
@@ -545,7 +558,8 @@ namespace wchess
 			}
 			WeirdEngine::Logger::log("[Story Intro Output] " + fullIntro);
 			// Log structured dataset entry for training
-			logDatasetEntry(0, 0, "", "", "", "", "", "", "Opening confrontation", m_activePremise, openingPrompt, fullIntro);
+			logDatasetEntry(0, 0, "", "", "", "", "", "", "Opening confrontation", m_activePremise, openingPrompt,
+							fullIntro);
 		}
 
 		void narrate(const MoveAnnotation& annotation, StoryStream& out) override
@@ -556,8 +570,9 @@ namespace wchess
 			// Option C cadence:
 			// Buffer White's standard move and pair it with Black's reply so the story
 			// narrates full turns with cohesive action and counter-action.
-			bool isCritical = annotation.tactics.checkmate || annotation.gameEnded ||
-							  (annotation.quality == MoveQuality::Blunder && annotation.impact == ImpactLevel::Critical);
+			bool isCritical =
+				annotation.tactics.checkmate || annotation.gameEnded ||
+				(annotation.quality == MoveQuality::Blunder && annotation.impact == ImpactLevel::Critical);
 
 			if (annotation.mover == Color::White && !isCritical)
 			{
@@ -570,9 +585,11 @@ namespace wchess
 
 			// 1. Translate chess moves into dramatic conflict action using the active match leaders
 			std::string dramaticEvent = formatTurnConflict(m_bufferedWhite, annotation, m_whiteLeader, m_blackLeader);
-			std::string whiteSan = m_bufferedWhite.has_value() ? (m_bufferedWhite->san.empty() ? "?" : m_bufferedWhite->san) : "";
+			std::string whiteSan =
+				m_bufferedWhite.has_value() ? (m_bufferedWhite->san.empty() ? "?" : m_bufferedWhite->san) : "";
 			std::string whiteQuality = m_bufferedWhite.has_value() ? qualityName(m_bufferedWhite->quality) : "";
-			std::string whiteEval = m_bufferedWhite.has_value() ? AnnotationWriter::formatScore(m_bufferedWhite->evalAfterCp) : "";
+			std::string whiteEval =
+				m_bufferedWhite.has_value() ? AnnotationWriter::formatScore(m_bufferedWhite->evalAfterCp) : "";
 
 			std::string blackSan = annotation.san.empty() ? "?" : annotation.san;
 			std::string blackQuality = qualityName(annotation.quality);
@@ -590,8 +607,8 @@ namespace wchess
 			std::string contextPrompt = buildContextPrompt(dramaticEvent, maxTokens, leadActor);
 
 			// Log comprehensive turn inputs before inference
-			WeirdEngine::Logger::log("-------------------- [Story Turn #" + std::to_string(m_turnIndex) +
-									 " (Move " + std::to_string(annotation.fullMoveNumber) + ")] --------------------");
+			WeirdEngine::Logger::log("-------------------- [Story Turn #" + std::to_string(m_turnIndex) + " (Move " +
+									 std::to_string(annotation.fullMoveNumber) + ")] --------------------");
 			if (m_bufferedWhite.has_value())
 			{
 				WeirdEngine::Logger::log("[Chess Input] " + formatMoveLog(*m_bufferedWhite));
@@ -620,10 +637,8 @@ namespace wchess
 
 				WeirdEngine::Logger::log("[LLM Story Output #" + std::to_string(m_turnIndex) + "] " + cleanStory);
 				// Log clean structured dataset entry for model training
-				logDatasetEntry(m_turnIndex, annotation.fullMoveNumber,
-								whiteSan, whiteQuality, whiteEval,
-								blackSan, blackQuality, blackEval,
-								dramaticEvent, fullContext, contextPrompt, cleanStory);
+				logDatasetEntry(m_turnIndex, annotation.fullMoveNumber, whiteSan, whiteQuality, whiteEval, blackSan,
+								blackQuality, blackEval, dramaticEvent, fullContext, contextPrompt, cleanStory);
 			}
 			else
 			{
@@ -633,7 +648,8 @@ namespace wchess
 				{
 					m_storyHistory.push_back(fallback);
 					out.updateCurrentChunk(fallback);
-					WeirdEngine::Logger::log("[LLM Story Output #" + std::to_string(m_turnIndex) + " (Fallback)] " + fallback);
+					WeirdEngine::Logger::log("[LLM Story Output #" + std::to_string(m_turnIndex) + " (Fallback)] " +
+											 fallback);
 				}
 			}
 
@@ -693,8 +709,7 @@ namespace wchess
 				{"Chef Luigi", "Chef Pierre", "in a fierce culinary rivalry for the master cup"},
 				{"Gladiator Spartacus", "Champion Crassus", "in the blood-soaked Colosseum arena"},
 				{"Hunter Rowan", "Bounty Hunter Jax", "crossing paths in a brutal arctic blizzard"},
-				{"General Marcus", "Rebel Leader Kira", "on opposite sides of an imperial coup"}
-			};
+				{"General Marcus", "Rebel Leader Kira", "on opposite sides of an imperial coup"}};
 
 			auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 			size_t idx = static_cast<size_t>(now) % seeds.size();
@@ -722,9 +737,7 @@ namespace wchess
 
 		static void extractLeaderNames(const std::string& premise, std::string& whiteLeader, std::string& blackLeader)
 		{
-			const std::vector<std::string> delimiters = {
-				" vs. ", " vs ", " versus ", " against ", " and "
-			};
+			const std::vector<std::string> delimiters = {" vs. ", " vs ", " versus ", " against ", " and "};
 
 			size_t sepPos = std::string::npos;
 			size_t sepLen = 0;
@@ -744,7 +757,8 @@ namespace wchess
 				std::string part1 = premise.substr(0, sepPos);
 				std::string part2 = premise.substr(sepPos + sepLen);
 
-				auto cleanEntityName = [](const std::string& raw) -> std::string {
+				auto cleanEntityName = [](const std::string& raw) -> std::string
+				{
 					std::string s = raw;
 
 					const std::vector<std::string> openingPhrases = {
@@ -761,8 +775,7 @@ namespace wchess
 						"Two opposing sides prepared for their decisive clash as ",
 						"Two rivals, ",
 						"Two contenders, ",
-						"Between "
-					};
+						"Between "};
 					for (const auto& op : openingPhrases)
 					{
 						if (s.find(op) == 0)
@@ -772,9 +785,8 @@ namespace wchess
 						}
 					}
 
-					const std::vector<std::string> prepPhrases = {
-						" of the ", " of ", " from the ", " from ", " in the ", " in ", " at "
-					};
+					const std::vector<std::string> prepPhrases = {" of the ", " of ", " from the ", " from ",
+																  " in the ", " in ", " at "};
 					for (const auto& prep : prepPhrases)
 					{
 						size_t p = s.find(prep);
@@ -784,7 +796,7 @@ namespace wchess
 							break;
 						}
 					}
-					
+
 					// Take only up to the first newline or punctuation
 					size_t breakPos = s.find_first_of("\n\r.?!:;,");
 					if (breakPos != std::string::npos)
@@ -798,13 +810,34 @@ namespace wchess
 						s.pop_back();
 					}
 
-					const std::vector<std::string> titles = {
-						"Commander ", "Admiral ", "Fleet Commander ", "Warlord ", "Agent ", "Ghost Operative ",
-						"Rogue Operative ", "Commodore ", "Captain ", "High Archmage ", "Void Conjurer ",
-						"Wasteland Raider ", "Iron Citadel Marshal ", "Marshal ", "Grand Inquisitor ", "Inquisitor ",
-						"Rebel Leader ", "Sky Captain ", "Corsair Captain ", "Lord ", "Duke ", "General ",
-						"Chef ", "Dr. ", "Doctor ", "Detective ", "Artist ", "Inventor "
-					};
+					const std::vector<std::string> titles = {"Commander ",
+															 "Admiral ",
+															 "Fleet Commander ",
+															 "Warlord ",
+															 "Agent ",
+															 "Ghost Operative ",
+															 "Rogue Operative ",
+															 "Commodore ",
+															 "Captain ",
+															 "High Archmage ",
+															 "Void Conjurer ",
+															 "Wasteland Raider ",
+															 "Iron Citadel Marshal ",
+															 "Marshal ",
+															 "Grand Inquisitor ",
+															 "Inquisitor ",
+															 "Rebel Leader ",
+															 "Sky Captain ",
+															 "Corsair Captain ",
+															 "Lord ",
+															 "Duke ",
+															 "General ",
+															 "Chef ",
+															 "Dr. ",
+															 "Doctor ",
+															 "Detective ",
+															 "Artist ",
+															 "Inventor "};
 					for (const auto& t : titles)
 					{
 						if (s.find(t) == 0)
@@ -827,10 +860,9 @@ namespace wchess
 					}
 
 					const std::vector<std::string> verbs = {
-						" looked", " said", " asked", " stepped", " clashed", " steered",
-						" fought", " channeled", " faced", " engaged", " met", " prepared",
-						" battled", " vied", " stared", " competed", " crossed", " entered", " began"
-					};
+						" looked",	  " said",	   " asked",   " stepped", " clashed",	" steered", " fought",
+						" channeled", " faced",	   " engaged", " met",	   " prepared", " battled", " vied",
+						" stared",	  " competed", " crossed", " entered", " began"};
 					for (const auto& v : verbs)
 					{
 						size_t p = s.find(v);
@@ -854,7 +886,8 @@ namespace wchess
 					return s;
 				};
 
-				auto isValidEntityName = [](const std::string& name) -> bool {
+				auto isValidEntityName = [](const std::string& name) -> bool
+				{
 					if (name.empty() || name.size() > 24)
 						return false;
 					if (name.find('"') != std::string::npos || name.find('?') != std::string::npos ||
@@ -884,7 +917,8 @@ namespace wchess
 			}
 		}
 
-		static std::string describePieceAction(const MoveAnnotation& ann, const std::string& moverName, const std::string& enemyName)
+		static std::string describePieceAction(const MoveAnnotation& ann, const std::string& moverName,
+											   const std::string& enemyName)
 		{
 			if (ann.move.isCastling)
 			{
@@ -901,13 +935,20 @@ namespace wchess
 			}
 			if (ann.hasCapture || ann.move.isCapture)
 			{
-				auto pieceValue = [](PieceType p) {
-					switch (p) {
-						case PieceType::Queen: return 9;
-						case PieceType::Rook: return 5;
-						case PieceType::Bishop: return 3;
-						case PieceType::Knight: return 3;
-						default: return 1;
+				auto pieceValue = [](PieceType p)
+				{
+					switch (p)
+					{
+						case PieceType::Queen:
+							return 9;
+						case PieceType::Rook:
+							return 5;
+						case PieceType::Bishop:
+							return 3;
+						case PieceType::Knight:
+							return 3;
+						default:
+							return 1;
 					}
 				};
 
@@ -916,14 +957,14 @@ namespace wchess
 
 				if (ann.pieceCaptured == PieceType::Queen && capVal > movVal)
 					return moverName + " delivered a devastating blow, severely crippling " + enemyName + ".";
-				
+
 				if (capVal > movVal)
 					return moverName + " executed a brilliant tactical strike, taking down a superior force.";
 				else if (capVal == movVal && capVal >= 3)
 					return moverName + " clashed head-on with " + enemyName + " in an even exchange of power.";
 				else if (capVal >= 3)
 					return moverName + " struck a solid hit against " + enemyName + ".";
-					
+
 				return moverName + " chipped away at the defenses of " + enemyName + ".";
 			}
 			if (ann.tactics.fork || ann.tactics.skewer)
@@ -941,49 +982,39 @@ namespace wchess
 			{
 				case MoveQuality::Best:
 				{
-					const char* opts[] = {
-						" executed a flawless maneuver.",
-						" shifted into a highly advantageous stance.",
-						" took firm control of the engagement."
-					};
+					const char* opts[] = {" executed a flawless maneuver.",
+										  " shifted into a highly advantageous stance.",
+										  " took firm control of the engagement."};
 					return moverName + std::string(opts[v]);
 				}
 				case MoveQuality::Excellent:
 				{
-					const char* opts[] = {
-						" pressed forward with tactical foresight.",
-						" adjusted their approach with calculated efficiency.",
-						" maneuvered into a commanding position."
-					};
+					const char* opts[] = {" pressed forward with tactical foresight.",
+										  " adjusted their approach with calculated efficiency.",
+										  " maneuvered into a commanding position."};
 					return moverName + std::string(opts[v]);
 				}
 				case MoveQuality::Good:
 				{
-					const char* opts[] = {
-						" probed the defenses of %s.",
-						" advanced steadily, testing the resolve of %s.",
-						" shifted their focus, preparing for the next clash with %s."
-					};
+					const char* opts[] = {" probed the defenses of %s.",
+										  " advanced steadily, testing the resolve of %s.",
+										  " shifted their focus, preparing for the next clash with %s."};
 					char buf[160];
 					snprintf(buf, sizeof(buf), opts[v], enemyName.c_str());
 					return moverName + std::string(buf);
 				}
 				case MoveQuality::Inaccuracy:
 				{
-					const char* opts[] = {
-						" wavered slightly, their movement landing just off the mark.",
-						" hesitated, drifting out of optimal position.",
-						" misjudged the angle, leaving a slight opening."
-					};
+					const char* opts[] = {" wavered slightly, their movement landing just off the mark.",
+										  " hesitated, drifting out of optimal position.",
+										  " misjudged the angle, leaving a slight opening."};
 					return moverName + std::string(opts[v]);
 				}
 				case MoveQuality::Mistake:
 				{
-					const char* opts[] = {
-						" overextended, leaving a dangerous gap in their defense.",
-						" stumbled, exposing a sudden weakness.",
-						" made a costly misstep, and the cracks began to show."
-					};
+					const char* opts[] = {" overextended, leaving a dangerous gap in their defense.",
+										  " stumbled, exposing a sudden weakness.",
+										  " made a costly misstep, and the cracks began to show."};
 					return moverName + std::string(opts[v]);
 				}
 				case MoveQuality::Blunder:
@@ -996,8 +1027,7 @@ namespace wchess
 		}
 
 		static std::string formatTurnConflict(const std::optional<MoveAnnotation>& whiteAnn,
-											  const MoveAnnotation& blackAnn,
-											  const std::string& whiteLeader,
+											  const MoveAnnotation& blackAnn, const std::string& whiteLeader,
 											  const std::string& blackLeader)
 		{
 			std::string out;
@@ -1021,13 +1051,13 @@ namespace wchess
 			if (!m_vocab || text.empty())
 				return 0;
 			std::vector<llama_token> tokens(text.size() + 16);
-			int n = llama_tokenize(m_vocab, text.c_str(), static_cast<int32_t>(text.size()),
-								   tokens.data(), static_cast<int32_t>(tokens.size()), true, false);
+			int n = llama_tokenize(m_vocab, text.c_str(), static_cast<int32_t>(text.size()), tokens.data(),
+								   static_cast<int32_t>(tokens.size()), true, false);
 			if (n < 0)
 			{
 				tokens.resize(static_cast<size_t>(-n));
-				n = llama_tokenize(m_vocab, text.c_str(), static_cast<int32_t>(text.size()),
-								   tokens.data(), static_cast<int32_t>(tokens.size()), true, false);
+				n = llama_tokenize(m_vocab, text.c_str(), static_cast<int32_t>(text.size()), tokens.data(),
+								   static_cast<int32_t>(tokens.size()), true, false);
 			}
 			return std::max(0, n);
 		}
@@ -1056,22 +1086,28 @@ namespace wchess
 			}
 
 			const struct llama_model* model = llama_get_model(m_ctx);
-			const char* chatTemplate = llama_model_chat_template(model);
+			const char* chatTemplate = (model != nullptr) ? llama_model_chat_template(model, nullptr) : nullptr;
 			if (chatTemplate != nullptr)
 			{
-				std::string systemMsg =
-					"You are a narrator recounting an ongoing rivalry between " + m_whiteLeader + " and " + m_blackLeader + ". "
-					"Write ONE short action sentence showing what happens next. "
-					"Match the intensity of the action: keep it grounded for simple maneuvers, and save the drama for direct attacks. "
-					"Never mention chess.";
+				std::string systemMsg = "You are a narrator recounting an ongoing rivalry between " + m_whiteLeader +
+										" and " + m_blackLeader +
+										". "
+										"Write ONE short action sentence showing what happens next. "
+										"Match the intensity of the action: keep it grounded for simple maneuvers, and "
+										"save the drama for direct attacks. "
+										"Never mention chess.";
 
-				std::string userMsg = "Rivals: " + m_whiteLeader + " vs " + m_blackLeader + "\n"
-									  "Story so far:\n" + m_activePremise;
+				std::string userMsg = "Rivals: " + m_whiteLeader + " vs " + m_blackLeader +
+									  "\n"
+									  "Story so far:\n" +
+									  m_activePremise;
 				if (!historyStr.empty())
 					userMsg += "\n" + historyStr;
-				userMsg += "\n\nWhat just happened:\n" + dramaticEvent + "\n\nWrite ONE new sentence describing what " + leadActor + " does next:";
+				userMsg += "\n\nWhat just happened:\n" + dramaticEvent + "\n\nWrite ONE new sentence describing what " +
+						   leadActor + " does next:";
 
-				return "<|im_start|>system\n" + systemMsg + "<|im_end|>\n<|im_start|>user\n" + userMsg + "<|im_end|>\n<|im_start|>assistant\n";
+				return "<|im_start|>system\n" + systemMsg + "<|im_end|>\n<|im_start|>user\n" + userMsg +
+					   "<|im_end|>\n<|im_start|>assistant\n";
 			}
 			else
 			{
@@ -1085,7 +1121,8 @@ namespace wchess
 			}
 		}
 
-		std::string generateText(const std::string& prompt, int maxTokens, bool stopAtSentence, StoryStream* stream = nullptr)
+		std::string generateText(const std::string& prompt, int maxTokens, bool stopAtSentence,
+								 StoryStream* stream = nullptr)
 		{
 			if (!m_model || !m_ctx || !m_vocab || !m_sampler)
 				return "";
@@ -1115,7 +1152,8 @@ namespace wchess
 			{
 				const std::string& beat = m_storyHistory[i];
 				std::vector<llama_token> hTokens(beat.size() + 16);
-				int hn = llama_tokenize(m_vocab, beat.c_str(), static_cast<int32_t>(beat.size()), hTokens.data(), static_cast<int32_t>(hTokens.size()), false, false);
+				int hn = llama_tokenize(m_vocab, beat.c_str(), static_cast<int32_t>(beat.size()), hTokens.data(),
+										static_cast<int32_t>(hTokens.size()), false, false);
 				if (hn > 0)
 				{
 					for (int k = 0; k < hn; ++k)
@@ -1125,8 +1163,7 @@ namespace wchess
 
 			// KV Cache Prefix Reuse: check how many prompt tokens match the cached KV prefix
 			size_t commonPrefix = 0;
-			while (commonPrefix < tokens.size() &&
-				   commonPrefix < m_cachedPromptTokens.size() &&
+			while (commonPrefix < tokens.size() && commonPrefix < m_cachedPromptTokens.size() &&
 				   tokens[commonPrefix] == m_cachedPromptTokens[commonPrefix])
 			{
 				commonPrefix++;
@@ -1194,9 +1231,9 @@ namespace wchess
 						{
 							streamPieceBuffer += cleanPiece;
 							// Emit the first piece immediately to start typewriter without delay, then batch
-							if (isFirstPiece || streamPieceBuffer.size() >= 12 || piece.find('.') != std::string::npos ||
-								piece.find('!') != std::string::npos || piece.find('?') != std::string::npos ||
-								piece.find('\n') != std::string::npos)
+							if (isFirstPiece || streamPieceBuffer.size() >= 12 ||
+								piece.find('.') != std::string::npos || piece.find('!') != std::string::npos ||
+								piece.find('?') != std::string::npos || piece.find('\n') != std::string::npos)
 							{
 								stream->appendToCurrentChunk(streamPieceBuffer);
 								streamPieceBuffer.clear();
@@ -1253,24 +1290,19 @@ namespace wchess
 			return output;
 		}
 
-		void logDatasetEntry(int step, int fullMoveNumber,
-							 const std::string& whiteSan, const std::string& whiteQuality, const std::string& whiteEval,
-							 const std::string& blackSan, const std::string& blackQuality, const std::string& blackEval,
-							 const std::string& eventText, const std::string& contextText,
+		void logDatasetEntry(int step, int fullMoveNumber, const std::string& whiteSan, const std::string& whiteQuality,
+							 const std::string& whiteEval, const std::string& blackSan, const std::string& blackQuality,
+							 const std::string& blackEval, const std::string& eventText, const std::string& contextText,
 							 const std::string& promptText, const std::string& storyText)
 		{
-			std::string json = "{\"step\":" + std::to_string(step) +
-							   ",\"full_move\":" + std::to_string(fullMoveNumber) +
-							   ",\"white_san\":\"" + escapeJson(whiteSan) + "\"" +
-							   ",\"white_quality\":\"" + escapeJson(whiteQuality) + "\"" +
-							   ",\"white_eval\":\"" + escapeJson(whiteEval) + "\"" +
-							   ",\"black_san\":\"" + escapeJson(blackSan) + "\"" +
-							   ",\"black_quality\":\"" + escapeJson(blackQuality) + "\"" +
-							   ",\"black_eval\":\"" + escapeJson(blackEval) + "\"" +
-							   ",\"event\":\"" + escapeJson(eventText) + "\"" +
-							   ",\"context\":\"" + escapeJson(contextText) + "\"" +
-							   ",\"prompt\":\"" + escapeJson(promptText) + "\"" +
-							   ",\"story\":\"" + escapeJson(storyText) + "\"}";
+			std::string json =
+				"{\"step\":" + std::to_string(step) + ",\"full_move\":" + std::to_string(fullMoveNumber) +
+				",\"white_san\":\"" + escapeJson(whiteSan) + "\"" + ",\"white_quality\":\"" + escapeJson(whiteQuality) +
+				"\"" + ",\"white_eval\":\"" + escapeJson(whiteEval) + "\"" + ",\"black_san\":\"" +
+				escapeJson(blackSan) + "\"" + ",\"black_quality\":\"" + escapeJson(blackQuality) + "\"" +
+				",\"black_eval\":\"" + escapeJson(blackEval) + "\"" + ",\"event\":\"" + escapeJson(eventText) + "\"" +
+				",\"context\":\"" + escapeJson(contextText) + "\"" + ",\"prompt\":\"" + escapeJson(promptText) + "\"" +
+				",\"story\":\"" + escapeJson(storyText) + "\"}";
 			WeirdEngine::Logger::log("[Story Dataset Export] " + json);
 		}
 

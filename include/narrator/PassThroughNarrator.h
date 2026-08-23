@@ -13,6 +13,8 @@
 #include "config.h"
 #include "narrator/INarrator.h"
 
+#include <weird-engine/Logger.h>
+
 #include <chrono>
 #include <string>
 #include <thread>
@@ -62,6 +64,7 @@ namespace wchess
 			std::string intro = m_premise.empty() ? std::string(ChessConfig::STORY_INTRO_PLACEHOLDER) : m_premise;
 			m_history.push_back(intro);
 			out.append(intro);
+			WeirdEngine::Logger::log(intro);
 			out.setStatus(StoryStatus::Idle);
 		}
 
@@ -76,22 +79,36 @@ namespace wchess
 								   AnnotationWriter::evalText(annotation) + ")";
 
 			out.append(moveLine);
+			WeirdEngine::Logger::log(moveLine);
 			std::this_thread::sleep_for(5ms); // simulate streaming so the pipeline is visible
 
 			if (!annotation.specialEvent.empty())
+			{
 				out.append(annotation.specialEvent);
+				WeirdEngine::Logger::log(annotation.specialEvent);
+			}
 
 			if (!annotation.tradeEvent.empty())
+			{
 				out.append(annotation.tradeEvent);
+				WeirdEngine::Logger::log(annotation.tradeEvent);
+			}
 
 			if (!annotation.gameStatus.empty())
+			{
 				out.append(annotation.gameStatus);
+				WeirdEngine::Logger::log(annotation.gameStatus);
+			}
 
 			// Story-length rule: critical blunders and mates stop the story abruptly.
 			if (annotation.tactics.checkmate || (annotation.gameEnded && annotation.gameState == GameState::Checkmate))
 			{
 				if (annotation.specialEvent.empty())
-					out.append("Checkmate. " + mover + " wins the game.");
+				{
+					std::string mateMsg = "Checkmate. " + mover + " wins the game.";
+					out.append(mateMsg);
+					WeirdEngine::Logger::log(mateMsg);
+				}
 				out.setStatus(StoryStatus::EndedAbruptly);
 			}
 			else if (annotation.quality == MoveQuality::Blunder && annotation.impact == ImpactLevel::Critical)
@@ -101,7 +118,9 @@ namespace wchess
 			else if (annotation.tactics.stalemate || annotation.tactics.draw ||
 					 (annotation.gameEnded && annotation.gameState != GameState::Ongoing))
 			{
-				out.append("Game ended in a draw.");
+				std::string drawMsg = "Game ended in a draw.";
+				out.append(drawMsg);
+				WeirdEngine::Logger::log(drawMsg);
 				out.setStatus(StoryStatus::EndedNaturally);
 			}
 			else
