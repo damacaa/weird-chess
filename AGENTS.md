@@ -7,6 +7,8 @@ cmake -S . -B build
 cmake --build build -j
 ```
 
+- **Quiet Builds**: When checking compilation, build quietly (e.g. `cmake --build build --target WeirdChess > /dev/null`) to avoid filling conversation context with verbose build progress output.
+
 Run: `./build/WeirdChess` (windowed 1280x720; the window expects a display).
 
 ## Tests
