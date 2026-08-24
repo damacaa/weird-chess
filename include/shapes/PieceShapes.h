@@ -55,66 +55,160 @@ namespace wchess
 		inline void registerAll(ShapeService& shapes)
 		{
 			using namespace SDF;
-			auto s = Expr(var(2));
 			auto p = translate(worldPoint(), { Expr(var(0)), Expr(var(1)) });
+			auto s = Expr(var(2));
 			
 			auto smooth = 0.03f * s;
 			
 			constexpr float BASE_Y = -0.38f;
 			constexpr float BASE_HW = 0.38f;
-			constexpr float BASE_HH = 0.12f;
+			constexpr float BASE_HH = 0.08f;
 			
 			auto makeBase = [&]() { return sdBox(translate(p, { 0.0f, BASE_Y * s }), { BASE_HW * s, BASE_HH * s }); };
 
 			// Pawn
 			{
-				auto shape = smoothUnion(makeBase(), sdTriangle(translate(p, { 0.0f, -0.06f * s }), 0.28f * s, 0.26f * s, 0.0f), smooth);
-				shape = smoothUnion(shape, sdBox(translate(p, { 0.0f, 0.04f * s }), { 0.16f * s, 0.035f * s }), smooth);
-				shape = smoothUnion(shape, sdCircle(translate(p, { 0.0f, 0.18f * s }), 0.18f * s), smooth);
+				auto shape = makeBase();
+				auto phase = var(0) * (1.5123f + var(1));
+				auto t = sin(1.0f * time() + phase);
+				auto displacement = 0.1f * s * t * t;
+				shape = sdfUnion(shape, sdCircle(translate(p, {0.0f, displacement + (0.1f * s)}), 0.21f * s));
+				shape = sdfUnion(shape, sdBox(translate(p, {0.0f, displacement + (-0.15f * s)}), {0.2f * s, 0.025f * s}));
+
+				shape =
+					sdfSmoothUnion(shape, sdTriangle(translate(p, {0.0f, -0.15f * s}), 0.3f * s, 0.35f * s), 1.0f);
+
 				s_ids[PieceShapeIdx::PAWN] = shapes.registerSDF(shape.node);
 			}
 
 			// Rook
 			{
-				auto shape = smoothUnion(makeBase(), sdBox(translate(p, { 0.0f, -0.06f * s }), { 0.28f * s, 0.24f * s }), smooth);
-				shape = smoothUnion(shape, sdBox(translate(p, { 0.0f, 0.24f * s }), { 0.36f * s, 0.09f * s }), smooth);
-				shape = smoothUnion(shape, sdBox(translate(p, { -0.24f * s, 0.34f * s }), { 0.08f * s, 0.07f * s }), smooth);
-				shape = smoothUnion(shape, sdBox(translate(p, { 0.24f * s, 0.34f * s }), { 0.08f * s, 0.07f * s }), smooth);
-				shape = smoothUnion(shape, sdBox(translate(p, { 0.0f, 0.34f * s }), { 0.07f * s, 0.07f * s }), smooth);
+				auto shape = makeBase();
+
+				// Lower stepped plinth & arched gatehouse portal
+				auto plinth = sdBox(translate(p, { 0.0f, -0.24f * s }), { 0.31f * s, 0.05f * s });
+				auto gate = sdBox(translate(p, { 0.0f, -0.32f * s }), { 0.08f * s, 0.08f * s });
+				gate = sdfUnion(gate, sdCircle(translate(p, { 0.0f, -0.24f * s }), 0.08f * s));
+				shape = sdfSubtract(sdfUnion(shape, plinth), gate);
+
+				// Tapered fortress tower column (inward slope as it rises)
+				auto towerTrapezoid = sdTriangle(translate(p, { 0.0f, -0.16f * s }), 0.54f * s, 0.70f * s);
+				auto towerBounds = sdBox(translate(p, { 0.0f, 0.00f * s }), { 0.28f * s, 0.20f * s });
+				auto tower = sdfIntersect(towerTrapezoid, towerBounds);
+
+				// Medieval crosslet arrow-loop window cut into the tower
+				auto vertSlit = sdBox(translate(p, { 0.0f, 0.04f * s }), { 0.024f * s, 0.08f * s });
+				auto horizSlit = sdBox(translate(p, { 0.0f, 0.06f * s }), { 0.06f * s, 0.020f * s });
+				auto crossLoop = sdfUnion(vertSlit, horizSlit);
+				tower = sdfSubtract(tower, crossLoop);
+
+				// Corbel bracket fanning outward & cornice ledge
+				auto corbel = sdTriangle(rotate(translate(p, { 0.0f, 0.20f * s }), 3.14159265f), 0.40f * s, 0.16f * s);
+				corbel = sdfIntersect(corbel, sdBox(translate(p, { 0.0f, 0.20f * s }), { 0.33f * s, 0.035f * s }));
+				auto cornice = sdBox(translate(p, { 0.0f, 0.23f * s }), { 0.35f * s, 0.02f * s });
+
+				// 4-merlon battlements with mirrored side embrasures and a central gap
+				auto parapet = sdBox(translate(p, { 0.0f, 0.31f * s }), { 0.35f * s, 0.07f * s });
+				auto centerCrenel = sdBox(translate(p, { 0.0f, 0.34f * s }), { 0.045f * s, 0.045f * s });
+				auto sideCrenels = sdBox(translate(mirrorX(p), { 0.17f * s, 0.34f * s }), { 0.045f * s, 0.045f * s });
+				auto crenels = sdfUnion(centerCrenel, sideCrenels);
+				auto battlements = sdfSubtract(parapet, crenels);
+
+				// Assemble: All inner parts use cheap min/max, exactly 1 smooth blend between body & fortified crown
+				auto castleCrown = sdfUnion(sdfUnion(corbel, cornice), battlements);
+				auto castleBase = sdfUnion(shape, tower);
+				shape = sdfSmoothUnion(castleBase, castleCrown, smooth);
+
 				s_ids[PieceShapeIdx::ROOK] = shapes.registerSDF(shape.node);
 			}
 
 			// Knight
 			{
-				auto shape = smoothUnion(makeBase(), sdTriangle(translate(p, { -0.02f * s, 0.06f * s }), 0.40f * s, 0.48f * s, 0.0f), smooth);
-				shape = smoothUnion(shape, sdBox(translate(p, { 0.20f * s, 0.18f * s }), { 0.18f * s, 0.13f * s }), smooth);
-				shape = smoothUnion(shape, sdTriangle(translate(p, { -0.10f * s, 0.34f * s }), 0.10f * s, 0.12f * s, 0.0f), smooth);
+				auto shape = makeBase();
+
+				
+				// Head
+				auto headCoords = p;
+				headCoords = rotate(headCoords, 0.2f);
+				headCoords = translate(headCoords, { 0.0f * s, 0.32f * s });
+				shape = sdfUnion(shape, sdBox(headCoords, { 0.25f * s, 0.12f * s }));
+				
+				// Neck
+				auto neckCoords = translate(p, {-0.19f * s, -0.0f * s});
+				auto neck = sdTriangle(neckCoords, 0.20f * s, 0.78f * s);
+				neck = sdfSmoothUnion(neck, sdCircle(translate(p, {0.2f * s, -0.1f * s}), 0.05f * s), 28.0f * smooth);
+
+				neck = sdfSubtract(neck, sdCircle(translate(p, {-0.38f * s, -0.3f * s}), 0.2f * s));
+
+				shape = sdfSmoothUnion(shape, neck, 3.0f * smooth);
+
 				s_ids[PieceShapeIdx::KNIGHT] = shapes.registerSDF(shape.node);
 			}
 
 			// Bishop
 			{
-				auto shape = smoothUnion(makeBase(), sdTriangle(translate(p, { 0.0f, -0.02f * s }), 0.30f * s, 0.36f * s, 0.0f), smooth);
-				shape = smoothUnion(shape, sdBox(translate(p, { 0.0f, 0.12f * s }), { 0.22f * s, 0.035f * s }), smooth);
-				shape = smoothUnion(shape, sdCircle(translate(p, { 0.0f, 0.26f * s }), 0.17f * s), smooth);
-				shape = smoothUnion(shape, sdCircle(translate(p, { 0.0f, 0.46f * s }), 0.06f * s), smooth);
+				auto shape = sdfSmoothUnion(makeBase(), sdTriangle(translate(p, { 0.0f, -0.1f * s }), 0.40f * s, 0.70f * s), 10.0f * smooth);
+				shape = sdfSmoothUnion(shape, sdBox(translate(p, { 0.0f, 0.12f * s }), { 0.22f * s, 0.035f * s }), smooth);
+				shape = sdfSmoothUnion(shape, sdCircle(translate(p, { 0.0f, 0.26f * s }), 0.17f * s), smooth);
+				shape = sdfSmoothUnion(shape, sdCircle(translate(p, { 0.0f, 0.46f * s }), 0.06f * s), smooth);
 				s_ids[PieceShapeIdx::BISHOP] = shapes.registerSDF(shape.node);
 			}
 
+			// Crown
+			constexpr float CROWN_Y = 0.4f;
+			constexpr float CROWN_W = 0.5f;
+			constexpr float CROWN_H = 0.4f;
+
 			// Queen
 			{
-				auto shape = smoothUnion(makeBase(), sdTriangle(translate(p, { 0.0f, 0.00f }), 0.32f * s, 0.40f * s, 0.0f), smooth);
-				shape = smoothUnion(shape, sdBox(translate(p, { 0.0f, 0.18f * s }), { 0.26f * s, 0.04f * s }), smooth);
-				shape = smoothUnion(shape, sdTriangle(translate(p, { 0.0f, 0.32f * s }), 0.36f * s, 0.15f * s, 0.0f), smooth);
-				shape = smoothUnion(shape, sdCircle(translate(p, { 0.0f, 0.48f * s }), 0.075f * s), smooth);
+				auto shape = makeBase();
+				auto body = sdTriangle(translate(p, {0.0f, 0.0f * s}), 0.35f * s, 0.90f * s);
+				shape = sdfSmoothUnion(shape, body, 10.0f * smooth);
+
+				// Crown
+				constexpr float CROWN_WAVE_AMP = 0.04f;
+
+				auto crownP = translate(p, {0.0f, CROWN_Y * s});
+				auto crown = sdTriangle(rotate(crownP, 3.14159265f), CROWN_W * s, CROWN_H * s);
+				auto waveAmp = CROWN_WAVE_AMP * s;
+				auto waveOffset = (CROWN_H / 3.0f) * s - waveAmp * 0.5f;
+				auto wave = sdSineWave(crownP, waveAmp, 35.0f / s, 4.0f, waveOffset);
+				crown = sdfIntersect(crown, wave);
+
+				auto crownCircle = sdCircle(translate(crownP, {0.0f, (CROWN_H / 3.0f + 0.017f) * s}), 0.075f * s);
+				crown = sdfSmoothUnion(crown, crownCircle, smooth);
+
+				auto crownBase = sdBox(translate(crownP, {0.0f, -0.15f * s}), {0.25f * s, 0.01f * s});
+				crown = sdfSmoothUnion(crown, crownBase, 5.0f * smooth);
+
+				shape = sdfUnion(shape, crown);
+
 				s_ids[PieceShapeIdx::QUEEN] = shapes.registerSDF(shape.node);
 			}
 
 			// King
 			{
-				auto shape = smoothUnion(makeBase(), sdTriangle(translate(p, { 0.0f, 0.02f * s }), 0.38f * s, 0.40f * s, 0.0f), smooth);
-				shape = smoothUnion(shape, sdBox(translate(p, { 0.0f, 0.34f * s }), { 0.24f * s, 0.07f * s }), smooth);
-				shape = smoothUnion(shape, sdBox(translate(p, { 0.0f, 0.42f * s }), { 0.07f * s, 0.17f * s }), smooth);
+				auto shape = makeBase();
+				auto body = sdTriangle(translate(p, {0.0f, 0.0f * s}), 0.35f * s, 0.90f * s);
+				shape = sdfSmoothUnion(shape, body, 10.0f * smooth);
+
+				constexpr float CROSS_W = 0.05f;
+
+				auto crownP = translate(p, {0.0f, CROWN_Y * s});
+				auto crown = sdTriangle(rotate(crownP, 3.14159265f), CROWN_W * s, CROWN_H * s);
+				auto crownHole = sdCircle(translate(crownP, {0.0f, (CROWN_H / 3.0f + 0.1f) * s}), 0.15f * s);
+				crown = sdfSubtract(crown, crownHole);
+
+				auto cross = sdStar(translate(crownP, {0.0f, (CROWN_H / 3.0f + 0.1f) * s}), CROSS_W * s, CROSS_W * s, 4.0f, 5.0f);
+				crown = sdfSmoothUnion(crown, cross, smooth);
+
+				auto crownBase = sdBox(translate(crownP, {0.0f, -0.15f * s}), {0.25f * s, 0.01f * s});
+
+
+				crown = sdfSmoothUnion(crown, crownBase, 5.0f * smooth);
+
+				shape = sdfUnion(shape, crown);
+
 				s_ids[PieceShapeIdx::KING] = shapes.registerSDF(shape.node);
 			}
 		}
