@@ -35,9 +35,6 @@ if(EMSCRIPTEN OR BUILD_WEB)
     set(BUILD_WEB ON)
     set(DEPLOY_STANDALONE ON CACHE BOOL "" FORCE)
     set(DEPLOY_STANDALONE ON)
-    set(HAVE_PTHREADS 1 CACHE BOOL "" FORCE)
-    set(HAVE_RECURSIVE_MUTEXES 1 CACHE BOOL "" FORCE)
-    set(SDL_THREAD_PTHREAD_RECURSIVE_MUTEX 1 CACHE BOOL "" FORCE)
 endif()
 
 if(DEPLOY_STANDALONE)
@@ -80,10 +77,6 @@ else()
     get_filename_component(WEIRD_ENGINE_REAL_SOURCE "${WEIRD_ENGINE_LOCAL_PATH}" ABSOLUTE)
 endif()
 
-if(TARGET SDL3-static)
-    target_compile_definitions(SDL3-static PRIVATE SDL_THREAD_PTHREAD_RECURSIVE_MUTEX=1)
-endif()
-
 # -------------------------------------------------------------------------
 # VENDORED CHESS LIBRARY (header-only, MIT - Disservin/chess-library)
 # chess.hpp is committed under third_party/chess/ so the project builds offline.
@@ -111,6 +104,20 @@ add_executable(${PROJECT_NAME} ${WEIRDGAME_SOURCES} ${WEIRDGAME_HEADERS} ${WEIRD
 
 if(BUILD_WEB)
     set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "index" SUFFIX ".html")
+    target_link_options(${PROJECT_NAME} PRIVATE
+        -pthread
+        -sPTHREAD_POOL_SIZE=4
+        -sINITIAL_MEMORY=67108864
+        -sALLOW_MEMORY_GROWTH=1
+        -sMAXIMUM_MEMORY=1073741824
+        -sMAX_WEBGL_VERSION=2
+        -sMIN_WEBGL_VERSION=2
+        "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"
+        "--exclude-file=*.gguf"
+        "--exclude-file=*models*"
+        "SHELL:--preload-file ${WEIRD_ENGINE_REAL_SOURCE}/src/weird-renderer/fonts@/fonts"
+        "SHELL:--preload-file ${WEIRD_ENGINE_REAL_SOURCE}/src/weird-renderer/shaders@/shaders"
+    )
 endif()
 
 # -------------------------------------------------------------------------
