@@ -175,6 +175,24 @@ namespace wchess
 
 			AnnotationWriter::decorate(ann, letter);
 
+			// --- piece count ---
+			int whiteMaterial = 0, blackMaterial = 0;
+			int whitePieces = 0, blackPieces = 0;
+			for (int i = 0; i < 64; ++i)
+			{
+				Square sq = Square::fromIndex(i);
+				auto p = before.pieceAt(sq);
+				if (p)
+				{
+					if (p->first == Color::White) { whitePieces++; whiteMaterial += pieceValue(p->second); }
+					else { blackPieces++; blackMaterial += pieceValue(p->second); }
+				}
+			}
+			ann.whiteMaterial = whiteMaterial;
+			ann.blackMaterial = blackMaterial;
+			ann.whitePieces = whitePieces;
+			ann.blackPieces = blackPieces;
+
 			// --- game end ---
 			if (job.isGameOver)
 			{

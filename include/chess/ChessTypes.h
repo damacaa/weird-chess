@@ -235,6 +235,11 @@ namespace wchess
 		std::string gameStatus;	  // Position evaluation and momentum shifts (tables
 								  // turned, tight spot)
 		std::string engineLine;	  // best line from the engine, as text
+
+		int whiteMaterial = 0;
+		int blackMaterial = 0;
+		int whitePieces = 0;
+		int blackPieces = 0;
 	};
 
 	inline const char* pieceTypeName(PieceType t)

@@ -85,7 +85,7 @@ namespace wchess
 			float lerpRate = 1.6f;
 			state.currentIntensity =
 				glm::mix(state.currentIntensity, state.targetIntensity, std::clamp(dt * lerpRate, 0.0f, 1.0f));
-			services.render().getBackground().intensity = state.currentIntensity;
+			services.render().getBackground().intensity = std::powf(state.currentIntensity, 2.2f);
 
 			// ---- 2. Checkmate Jingle Sequencer (Chill & Spaced with Initial Pause) ----
 			if (state.checkmateJingleTimer >= 0.0f)

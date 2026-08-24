@@ -721,6 +721,167 @@ static void testNarratorContext()
 	printf("narrator context checks passed\n");
 }
 
+static void testNarrativeVerification()
+{
+	printf("---- testing Narrative Verification & Endgame Acceptance Criteria ----\n");
+
+	LlamaNarrator llama;
+	std::string modelPath = "assets/models/gemma-2-2b-it-Q4_K_M.gguf";
+	bool loaded = llama.load(modelPath);
+	if (!loaded)
+	{
+		// Try fallback relative path
+		modelPath = "../assets/models/gemma-2-2b-it-Q4_K_M.gguf";
+		loaded = llama.load(modelPath);
+	}
+	CHECK(loaded);
+	printf("Loaded GGUF model for narrative verification: %s\n", modelPath.c_str());
+
+	llama.setLeaders("Admiral Drake", "Captain Flint");
+	llama.setActivePremise("Admiral Drake and Captain Flint clashed in stormy waters.");
+
+	// 1. Verify sliding context window (Move 20+ contains only sliding window of last 4 turns)
+	for (int i = 1; i <= 25; ++i)
+	{
+		llama.addStoryBeat("Sentence for turn " + std::to_string(i) + " of the naval battle.");
+	}
+
+	MoveAnnotation ann;
+	ann.mover = Color::Black;
+	ann.fullMoveNumber = 26;
+	ann.whitePieces = 8;
+	ann.blackPieces = 1; // Lone king for Flint
+	ann.pieceMoved = PieceType::King;
+	ann.quality = MoveQuality::Good;
+
+	std::string prompt = llama.testBuildContextPrompt("- Drake: advanced heavy ships.\n- Flint: retreated.", 50, ann);
+	printf("\n[Prompt Verification for Move 26]:\n%s\n", prompt.c_str());
+
+	// Must include Opening Premise
+	CHECK(prompt.find("Admiral Drake and Captain Flint clashed in stormy waters.") != std::string::npos);
+	// Must include the last 4 turns: 25, 24, 23, 22
+	CHECK(prompt.find("Sentence for turn 25") != std::string::npos);
+	CHECK(prompt.find("Sentence for turn 24") != std::string::npos);
+	CHECK(prompt.find("Sentence for turn 23") != std::string::npos);
+	CHECK(prompt.find("Sentence for turn 22") != std::string::npos);
+	// Must NOT include older turns (e.g. 1, 2, 10, 15, 20, 21)
+	CHECK(prompt.find("Sentence for turn 1 ") == std::string::npos);
+	CHECK(prompt.find("Sentence for turn 2 ") == std::string::npos);
+	CHECK(prompt.find("Sentence for turn 10 ") == std::string::npos);
+	CHECK(prompt.find("Sentence for turn 15 ") == std::string::npos);
+	CHECK(prompt.find("Sentence for turn 20 ") == std::string::npos);
+	CHECK(prompt.find("Sentence for turn 21 ") == std::string::npos);
+	printf(">> Sliding window of 4 recent turns strictly verified (turns 1-21 omitted).\n");
+
+	// 2. Verify low-material / lone King constraints in prompt and action descriptions
+	CHECK(prompt.find("Captain Flint is severely depleted, fighting alone for survival") != std::string::npos);
+	CHECK(prompt.find("Do NOT use army-scale descriptors for Captain Flint like 'disciplined lines', 'formations', 'reserves', or 'contingents'") != std::string::npos);
+
+	std::string pieceAction = LlamaNarrator::testDescribePieceAction(ann, "Captain Flint", "Admiral Drake");
+	printf("[Lone King Action Translation]: Flint %s\n", pieceAction.c_str());
+	CHECK(pieceAction.find("formation") == std::string::npos);
+	CHECK(pieceAction.find("reserves") == std::string::npos);
+	CHECK(pieceAction.find("contingents") == std::string::npos);
+	CHECK(pieceAction.find("disciplined lines") == std::string::npos);
+	CHECK(pieceAction.find("outer barriers") == std::string::npos);
+	printf(">> Lone King action descriptors strictly verified (army terms suppressed).\n");
+
+	// 3. Verify dedicated Epilogue Prompt for Checkmate & Stalemate
+	MoveAnnotation checkmateAnn = ann;
+	checkmateAnn.mover = Color::White;
+	checkmateAnn.tactics.checkmate = true;
+	checkmateAnn.gameEnded = true;
+	checkmateAnn.gameState = GameState::Checkmate;
+
+	std::string mateEpiloguePrompt = llama.testBuildEpiloguePrompt("Drake struck the final blow.", 90, checkmateAnn);
+	printf("\n[Checkmate Epilogue Prompt]:\n%s\n", mateEpiloguePrompt.c_str());
+	CHECK(mateEpiloguePrompt.find("Admiral Drake has delivered the final blow and won the match.") != std::string::npos);
+	CHECK(mateEpiloguePrompt.find("Write 1-2 vivid, dramatic concluding sentences providing thematic closure") != std::string::npos);
+
+	MoveAnnotation stalemateAnn = ann;
+	stalemateAnn.mover = Color::White;
+	stalemateAnn.tactics.stalemate = true;
+	stalemateAnn.gameEnded = true;
+	stalemateAnn.gameState = GameState::Stalemate;
+
+	std::string staleEpiloguePrompt = llama.testBuildEpiloguePrompt("Drake boxed Flint in.", 90, stalemateAnn);
+	printf("\n[Stalemate Epilogue Prompt]:\n%s\n", staleEpiloguePrompt.c_str());
+	CHECK(staleEpiloguePrompt.find("ending in an unresolved, bitter stalemate") != std::string::npos);
+	CHECK(staleEpiloguePrompt.find("Write 1-2 vivid, dramatic concluding sentences providing thematic closure") != std::string::npos);
+	printf(">> Epilogue prompts for Checkmate and Stalemate verified.\n");
+
+	// 4. Live execution: Run live turns and verify no consecutive duplicate sentences & epilogue generation
+	llama.reset();
+	llama.setPremise("Admiral Drake vs Captain Flint on stormy Caribbean waters");
+	StoryStream stream;
+	llama.narrateIntro(stream);
+
+	std::vector<std::string> generatedSentences;
+	auto initialHistory = llama.getStoryHistory();
+	for (const auto& s : initialHistory) generatedSentences.push_back(s);
+
+	// Simulate 6 live turns with Llama model inference
+	struct TurnMock {
+		PieceType piece;
+		Color mover;
+		bool check;
+		bool checkmate;
+		bool gameEnded;
+		GameState gameState;
+		int wPieces;
+		int bPieces;
+		MoveQuality quality;
+	};
+
+	std::vector<TurnMock> turns = {
+		{PieceType::Pawn, Color::White, false, false, false, GameState::Ongoing, 16, 16, MoveQuality::Best},
+		{PieceType::Pawn, Color::Black, false, false, false, GameState::Ongoing, 16, 16, MoveQuality::Good},
+		{PieceType::Knight, Color::White, false, false, false, GameState::Ongoing, 16, 16, MoveQuality::Best},
+		{PieceType::Knight, Color::Black, false, false, false, GameState::Ongoing, 16, 16, MoveQuality::Good},
+		{PieceType::Queen, Color::White, true, false, false, GameState::Ongoing, 16, 1, MoveQuality::Great},
+		{PieceType::Queen, Color::White, false, true, true, GameState::Checkmate, 16, 1, MoveQuality::Best}
+	};
+
+	int moveNum = 1;
+	for (const auto& tm : turns)
+	{
+		MoveAnnotation mAnn;
+		mAnn.mover = tm.mover;
+		mAnn.pieceMoved = tm.piece;
+		mAnn.fullMoveNumber = moveNum++;
+		mAnn.tactics.check = tm.check;
+		mAnn.tactics.checkmate = tm.checkmate;
+		mAnn.gameEnded = tm.gameEnded;
+		mAnn.gameState = tm.gameState;
+		mAnn.whitePieces = tm.wPieces;
+		mAnn.blackPieces = tm.bPieces;
+		mAnn.quality = tm.quality;
+		mAnn.san = (tm.mover == Color::White ? "e4" : "e5");
+
+		llama.narrate(mAnn, stream);
+	}
+
+	auto finalHistory = llama.getStoryHistory();
+	printf("\n==================== MATCH STORY CHRONICLE ====================\n");
+	for (size_t i = 0; i < finalHistory.size(); ++i)
+	{
+		printf("[%zu] %s\n", i, finalHistory[i].c_str());
+		if (i > 0)
+		{
+			// Verify no consecutive duplicate sentences
+			CHECK(finalHistory[i] != finalHistory[i - 1]);
+		}
+	}
+	printf("===============================================================\n");
+
+	// Verify epilogue is generated and captured in final story history
+	CHECK(finalHistory.size() >= 3);
+	std::string lastSentence = finalHistory.back();
+	CHECK(!lastSentence.empty());
+	printf(">> Live story generated %zu sentences without duplicates. Epilogue produced: \"%s\"\n",
+		   finalHistory.size(), lastSentence.c_str());
+}
+
 int main(int argc, char** argv)
 {
 	testMinimaxAI();
@@ -732,6 +893,7 @@ int main(int argc, char** argv)
 	testTextWrapping();
 	testGameIntensity();
 	testNarratorContext();
+	testNarrativeVerification();
 
 	ChessState state;
 	state.board = std::make_shared<ChessLibBoard>();

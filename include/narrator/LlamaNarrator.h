@@ -584,13 +584,14 @@ namespace wchess
 				llama_sampler_free(m_sampler);
 				m_sampler = nullptr;
 			}
-			// Initialize sampling chain (temp 0.80, min-p 0.05, repetition penalty 1.10)
+			// Initialize sampling chain (temp 0.80, top-p 0.90, min-p 0.05, repetition penalty 1.20)
 			// Cuts off repetitive echo loops while providing creative, grounded sentences and preserving named
 			// entities.
 			llama_sampler_chain_params sparams = llama_sampler_chain_default_params();
 			m_sampler = llama_sampler_chain_init(sparams);
-			llama_sampler_chain_add(m_sampler, llama_sampler_init_penalties(64, 1.10f, 0.0f, 0.0f));
+			llama_sampler_chain_add(m_sampler, llama_sampler_init_penalties(256, 1.20f, 0.10f, 0.10f));
 			llama_sampler_chain_add(m_sampler, llama_sampler_init_min_p(0.05f, 1));
+			llama_sampler_chain_add(m_sampler, llama_sampler_init_top_p(0.90f, 1));
 			llama_sampler_chain_add(m_sampler, llama_sampler_init_temp(0.80f));
 			uint32_t seed =
 				(m_configuredSeed >= 0)
@@ -867,11 +868,11 @@ namespace wchess
 			std::string contextPrompt;
 			bool stopAtSentence = true;
 
-			if (isCheckmate)
+			if (isGameOver)
 			{
 				maxTokens = 90; // allow 2-3 dramatic concluding sentences for the climax
 				stopAtSentence = false;
-				contextPrompt = buildClimaxPrompt(dramaticEvent, maxTokens, annotation);
+				contextPrompt = buildEpiloguePrompt(dramaticEvent, maxTokens, annotation);
 			}
 			else
 			{
@@ -880,8 +881,7 @@ namespace wchess
 				else if (annotation.fullMoveNumber > 25)
 					maxTokens = 60;
 				stopAtSentence = true;
-				std::string leadActor = (m_turnIndex % 2 == 1) ? m_whiteLeader : m_blackLeader;
-				contextPrompt = buildContextPrompt(dramaticEvent, maxTokens, leadActor);
+				contextPrompt = buildContextPrompt(dramaticEvent, maxTokens, annotation);
 			}
 
 			// Log comprehensive turn inputs before inference
@@ -964,6 +964,38 @@ namespace wchess
 			{
 				out.setStatus(StoryStatus::Generating);
 			}
+		}
+
+		std::string testBuildContextPrompt(const std::string& dramaticEvent, int maxTokens, const MoveAnnotation& ann)
+		{
+			return buildContextPrompt(dramaticEvent, maxTokens, ann);
+		}
+
+		std::string testBuildEpiloguePrompt(const std::string& dramaticEvent, int maxTokens, const MoveAnnotation& ann)
+		{
+			return buildEpiloguePrompt(dramaticEvent, maxTokens, ann);
+		}
+
+		void addStoryBeat(const std::string& beat)
+		{
+			m_storyHistory.push_back(beat);
+		}
+
+		void setActivePremise(const std::string& premise)
+		{
+			m_activePremise = premise;
+		}
+
+		void setLeaders(const std::string& white, const std::string& black)
+		{
+			m_whiteLeader = white;
+			m_blackLeader = black;
+		}
+
+		static std::string testDescribePieceAction(const MoveAnnotation& ann, const std::string& moverName,
+												   const std::string& enemyName)
+		{
+			return describePieceAction(ann, moverName, enemyName);
 		}
 
 	private:
@@ -1231,12 +1263,17 @@ namespace wchess
 				return "shifted into a fortified defensive redoubt, locking down the rear position.";
 			}
 
+			bool isMoverLowMaterial = (ann.mover == Color::White) ? (ann.whitePieces > 0 && ann.whitePieces <= 2)
+																  : (ann.blackPieces > 0 && ann.blackPieces <= 2);
+
 			if (ann.tactics.checkmate)
 			{
 				return "struck the decisive finishing blow - " + enemyName + " had no escape.";
 			}
 			if (ann.tactics.check)
 			{
+				if (isMoverLowMaterial)
+					return "struck back with a desperate counter-assault against " + enemyName + ".";
 				return "launched a direct assault against " + enemyName + ", forcing an urgent defensive scramble.";
 			}
 			if (ann.hasCapture || ann.move.isCapture)
@@ -1260,6 +1297,11 @@ namespace wchess
 
 				int capVal = pieceValue(ann.pieceCaptured);
 				int movVal = pieceValue(ann.pieceMoved);
+
+				if (isMoverLowMaterial)
+				{
+					return "struck in a desperate last stand, cutting down an advancing enemy before falling back.";
+				}
 
 				if (ann.pieceCaptured == PieceType::Queen && capVal > movVal)
 					return "struck down " + enemyName + "'s flagship champion in a devastating strike.";
@@ -1285,6 +1327,34 @@ namespace wchess
 			// Piece-specific actions based on move quality and piece type:
 			uint32_t seedIdx = static_cast<uint32_t>(ann.fullMoveNumber * 7 + static_cast<int>(ann.pieceMoved) * 11 +
 													 static_cast<int>(ann.quality) * 17);
+
+			if (isMoverLowMaterial || ann.pieceMoved == PieceType::King)
+			{
+				if (ann.quality == MoveQuality::Best || ann.quality == MoveQuality::Excellent)
+				{
+					const char* opts[] = {"retreated evasively, maneuvering as a lone survivor dodging pursuit.",
+										  "sought a defensible refuge, skillfully evading the closing net.",
+										  "maneuvered to an open pocket, staying on the move to survive."};
+					return std::string(opts[seedIdx % 3]);
+				}
+				if (ann.quality == MoveQuality::Good)
+				{
+					const char* opts[] = {"backed away into a cautious stance, bracing against the closing circle.",
+										  "shifted alone across the perimeter, staying out of immediate reach."};
+					return std::string(opts[seedIdx % 2]);
+				}
+				if (ann.quality == MoveQuality::Inaccuracy || ann.quality == MoveQuality::Mistake)
+				{
+					const char* opts[] = {"backed into a constricted angle with dwindling escape routes.",
+										  "hesitated under heavy pressure, losing crucial evasive ground."};
+					return std::string(opts[seedIdx % 2]);
+				}
+				if (ann.quality == MoveQuality::Blunder)
+				{
+					return "stumbled into a cornered pocket, leaving no remaining path to flee.";
+				}
+				return "retreated cautiously across the contested area.";
+			}
 
 			if (ann.pieceMoved == PieceType::Pawn)
 			{
@@ -1542,9 +1612,8 @@ namespace wchess
 			}
 		}
 
-		std::string buildContextPrompt(const std::string& dramaticEvent, int maxTokens, const std::string& leadActor)
+		std::string buildContextPrompt(const std::string& dramaticEvent, int maxTokens, const MoveAnnotation& ann)
 		{
-			(void)leadActor;
 			// Target token budget for the context prompt with 2048 token capacity
 			int targetHistoryTokens = std::max(128, static_cast<int>(m_ctxCapacity) - maxTokens - 250);
 
@@ -1553,16 +1622,27 @@ namespace wchess
 
 			std::string historyStr;
 			int currentHistoryTokens = 0;
+			int turnsIncluded = 0;
 			for (auto it = m_storyHistory.rbegin(); it != m_storyHistory.rend(); ++it)
 			{
 				int lineTokens = countTokens(*it);
-				if (currentHistoryTokens + lineTokens > targetHistoryTokens)
+				if (currentHistoryTokens + lineTokens > targetHistoryTokens || turnsIncluded >= 4)
 					break;
 				if (!historyStr.empty())
 					historyStr = (*it) + "\n" + historyStr;
 				else
 					historyStr = *it;
 				currentHistoryTokens += lineTokens;
+				turnsIncluded++;
+			}
+
+			std::string materialContext;
+			if (ann.whitePieces <= 2 && ann.blackPieces <= 2) {
+				materialContext = "Both sides have been reduced to lone survivors. Focus on the exhausted, intimate, desperate duel. Do NOT use army-scale descriptors like 'disciplined lines', 'formations', 'reserves', 'contingents', or 'outer barriers'.\n";
+			} else if (ann.whitePieces <= 2) {
+				materialContext = m_whiteLeader + " is severely depleted, fighting alone for survival against overwhelming forces. Do NOT use army-scale descriptors for " + m_whiteLeader + " like 'disciplined lines', 'formations', 'reserves', or 'contingents'. Frame their actions as evasive retreats or desperate last stands.\n";
+			} else if (ann.blackPieces <= 2) {
+				materialContext = m_blackLeader + " is severely depleted, fighting alone for survival against overwhelming forces. Do NOT use army-scale descriptors for " + m_blackLeader + " like 'disciplined lines', 'formations', 'reserves', or 'contingents'. Frame their actions as evasive retreats or desperate last stands.\n";
 			}
 
 			const struct llama_model* model = llama_get_model(m_ctx);
@@ -1580,7 +1660,7 @@ namespace wchess
 					"and critical mistakes.\n"
 					"Each actor performed their respective action. Do not mix up who acted. "
 					"Use fresh, varied phrasing and avoid repeating stock phrases from previous turns. "
-					"Do not invent new major events beyond what just happened. Never mention chess terms.";
+					"Do not invent new major events beyond what just happened. Never mention chess terms.\n" + materialContext;
 
 				std::string userMsg = "Rivals: " + m_whiteLeader + " vs " + m_blackLeader + "\n";
 				if (!m_setting.empty())
@@ -1605,7 +1685,7 @@ namespace wchess
 			}
 		}
 
-		std::string buildClimaxPrompt(const std::string& dramaticEvent, int maxTokens, const MoveAnnotation& ann)
+		std::string buildEpiloguePrompt(const std::string& dramaticEvent, int maxTokens, const MoveAnnotation& ann)
 		{
 			int targetHistoryTokens = std::max(128, static_cast<int>(m_ctxCapacity) - maxTokens - 250);
 
@@ -1614,20 +1694,33 @@ namespace wchess
 
 			std::string historyStr;
 			int currentHistoryTokens = 0;
+			int turnsIncluded = 0;
 			for (auto it = m_storyHistory.rbegin(); it != m_storyHistory.rend(); ++it)
 			{
 				int lineTokens = countTokens(*it);
-				if (currentHistoryTokens + lineTokens > targetHistoryTokens)
+				if (currentHistoryTokens + lineTokens > targetHistoryTokens || turnsIncluded >= 4)
 					break;
 				if (!historyStr.empty())
 					historyStr = (*it) + "\n" + historyStr;
 				else
 					historyStr = *it;
 				currentHistoryTokens += lineTokens;
+				turnsIncluded++;
 			}
 
 			std::string winner = (ann.mover == Color::White) ? m_whiteLeader : m_blackLeader;
 			std::string loser = (ann.mover == Color::White) ? m_blackLeader : m_whiteLeader;
+
+			std::string outcomeStr;
+			if (ann.tactics.checkmate) {
+				outcomeStr = winner + " has delivered the final blow and won the match.";
+			} else if (ann.tactics.stalemate || ann.gameState == GameState::Stalemate) {
+				outcomeStr = winner + " held overwhelming supremacy, but through a fatal misstep boxed the opponent into an untargetable position, ending in an unresolved, bitter stalemate.";
+			} else if (ann.gameState == GameState::InsufficientMaterial || ann.gameState == GameState::FiftyMoveRule || ann.gameState == GameState::ThreefoldRepetition || ann.tactics.draw) {
+				outcomeStr = "The long conflict has ground to a halt, ending in an exhausted draw with no decisive victor.";
+			} else {
+				outcomeStr = loser + " has resigned or collapsed, yielding victory to " + winner + ".";
+			}
 
 			const struct llama_model* model = llama_get_model(m_ctx);
 			const char* chatTemplate = (model != nullptr) ? llama_model_chat_template(model, nullptr) : nullptr;
@@ -1635,15 +1728,13 @@ namespace wchess
 			{
 				std::string settingContext = m_setting.empty() ? "" : (" (" + m_setting + ")");
 				std::string systemMsg =
-					"You are a master storyteller bringing the conflict between " + winner + " and " + loser +
-					settingContext + " to its decisive climax.\n" + winner +
-					" has delivered the final blow and won the match.\n"
-					"Write 2-3 vivid, dramatic sentences depicting the final victory, the defeat of " +
-					loser +
-					", and the resolution of their confrontation in a way that fits this specific setting.\n"
+					"You are a master storyteller bringing the conflict between " + m_whiteLeader + " and " + m_blackLeader +
+					settingContext + " to its conclusion.\n" + outcomeStr + "\n"
+					"Write 1-2 vivid, dramatic concluding sentences providing thematic closure, depicting the final state of the match "
+					"and the resolution of their confrontation in a way that fits this specific setting.\n"
 					"Never mention chess terms.";
 
-				std::string userMsg = "Rivals: " + winner + " (Victor) vs " + loser + " (Defeated)\n";
+				std::string userMsg = "Rivals: " + m_whiteLeader + " vs " + m_blackLeader + "\n";
 				if (!m_setting.empty())
 					userMsg += "Setting: " + m_setting + "\n";
 				userMsg += "Story so far:\n" + m_activePremise;
@@ -1656,7 +1747,7 @@ namespace wchess
 			}
 			else
 			{
-				std::string prompt = "The conflict concludes decisively in favor of " + winner + " (" + m_setting + "). ";
+				std::string prompt = outcomeStr + " (" + m_setting + "). ";
 				if (!m_activePremise.empty())
 					prompt += m_activePremise + " ";
 				if (!historyStr.empty())
