@@ -114,8 +114,8 @@ namespace wchess
 		}
 
 		// Light and dark square material ids (palette slots, see globals.h).
-		inline constexpr uint16_t LIGHT = ChessPalette::LightSquare;
-		inline constexpr uint16_t DARK = ChessPalette::DarkSquare;
+		inline constexpr uint16_t LIGHT = ChessPalette::LIGHT_SQUARE_MATERIAL_IDX;
+		inline constexpr uint16_t DARK = ChessPalette::DARK_SQUARE_MATERIAL_IDX;
 
 		// Helper to create a single BOX_LINE highlight overlay with a fixed material.
 		inline Entity createHighlightShape(ShapeService& shapes, uint16_t material)
@@ -159,22 +159,22 @@ namespace wchess
 			state.highlightEntities.reserve(ChessConfig::MAX_TARGET_HIGHLIGHTS);
 			for (int i = 0; i < ChessConfig::MAX_TARGET_HIGHLIGHTS; ++i)
 			{
-				Entity highlight = createHighlightShape(shapes, ChessPalette::HighlightCyan);
+				Entity highlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_CYAN_MATERIAL_IDX);
 				registry.setComponentDirty(registry.getComponent<CustomShape>(highlight));
 				state.highlightEntities.push_back(highlight);
 			}
 
 			// Dedicated overlays with fixed colors so no shader recompilation is needed
-			state.selectionHighlight = createHighlightShape(shapes, ChessPalette::HighlightGreen);
+			state.selectionHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_GREEN_MATERIAL_IDX);
 			registry.setComponentDirty(registry.getComponent<CustomShape>(state.selectionHighlight));
 
-			state.lastMoveFromHighlight = createHighlightShape(shapes, ChessPalette::HighlightYellow);
+			state.lastMoveFromHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_YELLOW_MATERIAL_IDX);
 			registry.setComponentDirty(registry.getComponent<CustomShape>(state.lastMoveFromHighlight));
 
-			state.lastMoveToHighlight = createHighlightShape(shapes, ChessPalette::HighlightYellow);
+			state.lastMoveToHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_YELLOW_MATERIAL_IDX);
 			registry.setComponentDirty(registry.getComponent<CustomShape>(state.lastMoveToHighlight));
 
-			state.checkHighlight = createHighlightShape(shapes, ChessPalette::CheckRed);
+			state.checkHighlight = createHighlightShape(shapes, ChessPalette::CHECK_RED_MATERIAL_IDX);
 			registry.setComponentDirty(registry.getComponent<CustomShape>(state.checkHighlight));
 
 			return squares;

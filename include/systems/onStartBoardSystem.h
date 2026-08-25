@@ -25,6 +25,19 @@ namespace wchess
 	{
 		ChessState& state = getState(registry);
 
+		// ---- 2D materials ----
+		for (size_t i = 0; i < ColorPalette::Default.size() && i < 16; ++i)
+		{
+			auto& m = services.materials2D().get(static_cast<uint16_t>(i));
+			m.color = ColorPalette::Default[i];
+		}
+		
+		services.materials2D().get(ChessPalette::BLACK_PIECE_MATERIAL_IDX).color = vec4(0.02f, 0.02f, 0.07f, 1.0f);
+		services.materials2D().get(ChessPalette::WHITE_PIECE_MATERIAL_IDX).color = vec4(0.93f, 0.93f, 0.90f, 1.0f);
+		services.materials2D().get(ChessPalette::PANEL_TEXT_DIM_MATERIAL_IDX).color = vec4(0.52f, 0.52f, 0.58f, 1.0f);
+		services.materials2D().get(ChessPalette::LIGHT_SQUARE_MATERIAL_IDX).color = vec4(0.84f, 0.78f, 0.66f, 1.0f);
+		services.materials2D().get(ChessPalette::DARK_SQUARE_MATERIAL_IDX).color = vec4(0.50f, 0.37f, 0.24f, 1.0f);
+
 		// ---- board rules + AI ----
 		state.board = std::make_shared<ChessLibBoard>();
 		state.board->loadStartPosition();
@@ -294,42 +307,42 @@ namespace wchess
 
 		// ---- right panel (pure story UI) ----
 		// The main header text holds the title of the story
-		state.titleText = UIButtonFactory::createText(registry, 0.0f, 0.0f, "WEIRD CHESS", ChessPalette::PanelTitle);
+		state.titleText = UIButtonFactory::createText(registry, 0.0f, 0.0f, "WEIRD CHESS", ChessPalette::PANEL_TITLE_MATERIAL_IDX);
 
 		for (int i = 0; i < ChessConfig::STORY_MAX_LINES; ++i)
 		{
-			state.storyLines.push_back(UIButtonFactory::createText(registry, 0.0f, 0.0f, "", ChessPalette::PanelText));
+			state.storyLines.push_back(UIButtonFactory::createText(registry, 0.0f, 0.0f, "", ChessPalette::PANEL_TEXT_MATERIAL_IDX));
 		}
 
 		// ---- buttons and toggles (bottom right UI strip, distinct shapes without text) ----
 		// Reset button: Square Box shape
 		state.newGameButton = UIButtonFactory::createButton(registry, services.shapes(), 0.0f, 0.0f, 40.0f, 40.0f,
-															ChessPalette::ButtonBox);
+															ChessPalette::BUTTON_BOX_MATERIAL_IDX);
 
 		// Manual opponent override toggle: Circle shape
 		state.disableAIToggle =
-			UIButtonFactory::createToggle(registry, services.shapes(), 0.0f, 0.0f, 18.0f, ChessPalette::ToggleCircle);
+			UIButtonFactory::createToggle(registry, services.shapes(), 0.0f, 0.0f, 18.0f, ChessPalette::TOGGLE_CIRCLE_MATERIAL_IDX);
 
 		// ---- promotion modal UI (centered overlay when promoting) ----
 		state.promoCard = UIButtonFactory::createBoxLine(
-			registry, services.shapes(), -1000.0f, -1000.0f, 440.0f, 160.0f, 6.0f, ChessPalette::PanelText);
+			registry, services.shapes(), -1000.0f, -1000.0f, 440.0f, 160.0f, 6.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
 		// Promotion shape buttons (Queen, Rook, Bishop, Knight - green like text)
 		state.promoQueenButton = UIButtonFactory::createPieceButton(
 			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::QUEEN], -1000.0f, -1000.0f, 50.0f,
-			ChessPalette::PanelText);
+			ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
 		state.promoRookButton = UIButtonFactory::createPieceButton(
 			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::ROOK], -1000.0f, -1000.0f, 50.0f,
-			ChessPalette::PanelText);
+			ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
 		state.promoBishopButton = UIButtonFactory::createPieceButton(
 			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::BISHOP], -1000.0f, -1000.0f, 50.0f,
-			ChessPalette::PanelText);
+			ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
 		state.promoKnightButton = UIButtonFactory::createPieceButton(
 			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::KNIGHT], -1000.0f, -1000.0f, 50.0f,
-			ChessPalette::PanelText);
+			ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
 		// ---- layout (positions everything) ----
 		state.lastResolutionHash = 0;

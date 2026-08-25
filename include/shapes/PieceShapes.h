@@ -248,7 +248,7 @@ namespace wchess
 			shape.distanceFieldId = s_ids[indexFor(type)];
 			shape.combination = CombinationType::Addition;
 			shape.hasCollisions = false;
-			shape.material = color == Color::White ? ChessPalette::WhitePiece : ChessPalette::BlackPiece;
+			shape.material = color == Color::White ? ChessPalette::WHITE_PIECE_MATERIAL_IDX : ChessPalette::BLACK_PIECE_MATERIAL_IDX;
 			shape.parameters[0] = x;
 			shape.parameters[1] = y;
 			shape.parameters[2] = scale;
