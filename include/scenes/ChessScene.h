@@ -5,8 +5,7 @@
 // nothing is implemented inline here (unlike the old weird-golfing style).
 //
 // Registered systems (run in registration order):
-//   onCreate    : state entity + physics pause
-//   onStart     : board, pieces, UI, narrator thread, AI
+//   onStart     : state init (scene state), board, pieces, UI, narrator thread, AI
 //   onUpdate    : input -> ai -> animation -> narrative -> layout -> ui
 //   onDestroy   : narrator + AI shutdown
 //   ImGui       : debug overlay
@@ -19,9 +18,9 @@
 #include "systems/inputSystem.h"
 #include "systems/layoutSystem.h"
 #include "systems/narrativeRenderSystem.h"
-#include "systems/onCreateSystem.h"
 #include "systems/onDestroySystem.h"
 #include "systems/onStartBoardSystem.h"
+#include "systems/stateInitSystem.h"
 #include "systems/uiSystem.h"
 
 namespace wchess
@@ -32,7 +31,7 @@ namespace wchess
 		ChessScene()
 		{
 			// ---- lifecycle ----
-			addCreateSystem(onCreateSystem);
+			addStartSystem(stateInitSystem);
 			addStartSystem(onStartBoardSystem);
 
 			// ---- per frame, in order ----

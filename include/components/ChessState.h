@@ -9,10 +9,10 @@ using WeirdEngine::INVALID_ENTITY;
 using WeirdEngine::Registry;
 using WeirdEngine::vec2;
 
-// Scene-wide game state as a single ECS component (one "state" entity,
-// created by onCreateSystem). Holds the chess board, the AI, the narrator
-// thread and every UI entity handle the systems need. All members are
-// copyable so the ECS storage can reallocate freely (hence shared_ptr).
+// Scene-wide game state as a registry-owned scene state (one instance per
+// type, created by stateInitSystem). Holds the chess board, the AI, the
+// narrator thread and every UI entity handle the systems need. Runtime data
+// only: scene states are never serialized.
 
 #include "chess/AsyncAnnotator.h"
 #include "chess/ChessLibBoard.h"
@@ -101,19 +101,19 @@ namespace wchess
 
 		// ---- UI entity handles ----
 		Entity titleText = INVALID_ENTITY;
-		Entity statusText = INVALID_ENTITY;					  // "WHITE TO MOVE" / last annotation title
-		Entity moveLogText = INVALID_ENTITY;				  // "12. e4  12... e5"
-		std::vector<Entity> storyLines;						  // one UITextRenderer per line
-		int storyVisibleLines = ChessConfig::STORY_MAX_LINES; // set by layoutSystem
-		std::deque<std::string> storyText;					  // visible story lines (front = top)
-		std::vector<std::string> rawStoryChunks;			  // full history of raw story paragraphs
-		std::vector<std::string> formattedStoryLines;		  // wrapped story lines
-		float storyRevealedChars = 0.0f;					  // character reveal progress for typewriter
-		size_t lastTotalStoryChars = 0;						  // total chars across wrapped lines
+		Entity statusText = INVALID_ENTITY;								 // "WHITE TO MOVE" / last annotation title
+		Entity moveLogText = INVALID_ENTITY;							 // "12. e4  12... e5"
+		std::vector<Entity> storyLines;									 // one UITextRenderer per line
+		int storyVisibleLines = ChessConfig::STORY_MAX_LINES;			 // set by layoutSystem
+		std::deque<std::string> storyText;								 // visible story lines (front = top)
+		std::vector<std::string> rawStoryChunks;						 // full history of raw story paragraphs
+		std::vector<std::string> formattedStoryLines;					 // wrapped story lines
+		float storyRevealedChars = 0.0f;								 // character reveal progress for typewriter
+		size_t lastTotalStoryChars = 0;									 // total chars across wrapped lines
 		float typewriterSpeed = ChessConfig::STORY_TYPEWRITER_MIN_SPEED; // chars/sec
-		int lastWrapChars = 0;								  // last computed wrap width in characters
-		float currentIntensity = 0.0f;						  // smoothly interpolated intensity in [0.0, 1.0]
-		float targetIntensity = 0.0f;						  // target intensity driving background shader
+		int lastWrapChars = 0;											 // last computed wrap width in characters
+		float currentIntensity = 0.0f; // smoothly interpolated intensity in [0.0, 1.0]
+		float targetIntensity = 0.0f;  // target intensity driving background shader
 		Entity newGameButton = INVALID_ENTITY;
 		Entity disableAIToggle = INVALID_ENTITY;
 		Entity promoCard = INVALID_ENTITY;
@@ -125,9 +125,10 @@ namespace wchess
 		Entity storyStatus = INVALID_ENTITY;
 	};
 
-	// The state entity owns exactly one ChessState component.
 	inline ChessState& getState(Registry& registry)
 	{
-		return registry.getComponentArray<ChessState>()->getDataAtIdx(0);
+		ChessState* state = registry.getState<ChessState>();
+		WEIRD_ASSERT(state != nullptr, "ChessState is missing: stateInitSystem must be the first start system");
+		return *state;
 	}
 } // namespace wchess

@@ -15,10 +15,29 @@
 #include "config.h"
 #include "globals.h"
 
+#include <weird-audio/SdfSong.h>
+
 namespace wchess
 {
 	namespace PieceShapes
 	{
+		inline std::shared_ptr<WeirdAudio::SdfSong> createPawnSong()
+		{
+			using namespace SDF;
+			constexpr float smooth = 0.03f;
+			constexpr float BASE_Y = -0.38f;
+			constexpr float BASE_HW = 0.38f;
+			constexpr float BASE_HH = 0.08f;
+			auto p = point();
+			auto shape = sdBox(translate(p, {0.0f, BASE_Y}), {BASE_HW, BASE_HH});
+			auto phase = var(0) * (1.5123f + var(1));
+			auto t = sin(1.0f * time() + phase);
+			auto displacement = 0.1f * t * t;
+			shape = sdfUnion(shape, sdCircle(translate(p, {0.0f, displacement + 0.1f}), 0.21f));
+			shape = sdfUnion(shape, sdBox(translate(p, {0.0f, displacement - 0.15f}), {0.2f, 0.025f}));
+			shape = sdfSmoothUnion(shape, sdTriangle(translate(p, {0.0f, -0.15f}), 0.3f, 0.35f), 5.0f * smooth);
+			return WeirdAudio::SdfSong::create("pawn", shape);
+		}
 		enum PieceShapeIdx
 		{
 			PAWN = 0,
@@ -51,20 +70,19 @@ namespace wchess
 			}
 		}
 
-
 		inline void registerAll(ShapeService& shapes)
 		{
 			using namespace SDF;
 			auto s = Expr(var(2));
-			auto p = translate(worldPoint(), { Expr(var(0)), Expr(var(1)) }) / s;
-			
+			auto p = translate(point(), {Expr(var(0)), Expr(var(1))}) / s;
+
 			constexpr float smooth = 0.03f;
-			
+
 			constexpr float BASE_Y = -0.38f;
 			constexpr float BASE_HW = 0.38f;
 			constexpr float BASE_HH = 0.08f;
-			
-			auto makeBase = [&]() { return sdBox(translate(p, { 0.0f, BASE_Y }), { BASE_HW, BASE_HH }); };
+
+			auto makeBase = [&]() { return sdBox(translate(p, {0.0f, BASE_Y}), {BASE_HW, BASE_HH}); };
 
 			// Pawn
 			{
@@ -75,8 +93,7 @@ namespace wchess
 				shape = sdfUnion(shape, sdCircle(translate(p, {0.0f, displacement + 0.1f}), 0.21f));
 				shape = sdfUnion(shape, sdBox(translate(p, {0.0f, displacement - 0.15f}), {0.2f, 0.025f}));
 
-				shape =
-					sdfSmoothUnion(shape, sdTriangle(translate(p, {0.0f, -0.15f}), 0.3f, 0.35f), 5.0f * smooth);
+				shape = sdfSmoothUnion(shape, sdTriangle(translate(p, {0.0f, -0.15f}), 0.3f, 0.35f), 5.0f * smooth);
 
 				s_ids[PieceShapeIdx::PAWN] = shapes.registerSDF((shape * s).node);
 			}
@@ -86,25 +103,25 @@ namespace wchess
 				auto shape = makeBase();
 
 				// Stepped plinth
-				auto plinth = sdBox(translate(p, { 0.0f, -0.27f }), { 0.30f, 0.03f });
+				auto plinth = sdBox(translate(p, {0.0f, -0.27f}), {0.30f, 0.03f});
 
 				// Tapered tower shaft (column)
-				auto towerCone = sdTriangle(translate(p, { 0.0f, 0.34f }), 0.65f, 1.74f);
-				auto towerBounds = sdBox(translate(p, { 0.0f, -0.035f }), { 0.25f, 0.205f });
+				auto towerCone = sdTriangle(translate(p, {0.0f, 0.34f}), 0.65f, 1.74f);
+				auto towerBounds = sdBox(translate(p, {0.0f, -0.035f}), {0.25f, 0.205f});
 				auto column = sdfIntersect(towerCone, towerBounds);
 
 				// Capital collar ledge & parapet base
-				auto collar = sdBox(translate(p, { 0.0f, 0.19f }), { 0.28f, 0.02f });
-				auto parapetLedge = sdBox(translate(p, { 0.0f, 0.245f }), { 0.30f, 0.035f });
+				auto collar = sdBox(translate(p, {0.0f, 0.19f}), {0.28f, 0.02f});
+				auto parapetLedge = sdBox(translate(p, {0.0f, 0.245f}), {0.30f, 0.035f});
 
 				// Modulo repeating boxes for battlements, moving horizontally with time
 				constexpr float SPACING = 0.22f;
 				auto animatedX = p.x + 0.1f * time();
 				auto modX = mod(animatedX + 0.5f * SPACING, SPACING) - 0.5f * SPACING;
-				auto repeatingBoxes = sdBox({ modX, p.y - 0.33f }, { 0.07f, 0.055f });
+				auto repeatingBoxes = sdBox({modX, p.y - 0.33f}, {0.07f, 0.055f});
 
 				// Intersect repeating boxes with the tower width bounding box
-				auto towerWidthBox = sdBox(translate(p, { 0.0f, 0.33f }), { 0.30f, 0.055f });
+				auto towerWidthBox = sdBox(translate(p, {0.0f, 0.33f}), {0.30f, 0.055f});
 				auto movingBattlements = sdfIntersect(repeatingBoxes, towerWidthBox);
 
 				auto battlements = sdfUnion(parapetLedge, movingBattlements);
@@ -120,13 +137,13 @@ namespace wchess
 			// Knight
 			{
 				auto shape = makeBase();
-				
+
 				// Head
 				auto headCoords = p;
 				headCoords = rotate(headCoords, 0.2f);
-				headCoords = translate(headCoords, { 0.0f, 0.32f });
-				shape = sdfUnion(shape, sdBox(headCoords, { 0.25f, 0.12f }));
-				
+				headCoords = translate(headCoords, {0.0f, 0.32f});
+				shape = sdfUnion(shape, sdBox(headCoords, {0.25f, 0.12f}));
+
 				// Neck
 				auto neckCoords = translate(p, {-0.19f, -0.0f});
 				auto neck = sdTriangle(neckCoords, 0.20f, 0.78f);
@@ -147,17 +164,17 @@ namespace wchess
 				auto headCounterAngle = -2.0f * bodyAngle;
 
 				// 1. Body coordinate frame (pivoted near base at y = -0.33)
-				auto bodyP = rotate(translate(p, { 0.0f, -0.33f }), bodyAngle);
-				auto body = sdTriangle(translate(bodyP, { 0.0f, 0.23f }), 0.40f, 0.70f);
-				auto collar = sdBox(translate(bodyP, { 0.0f, 0.45f }), { 0.22f, 0.035f });
+				auto bodyP = rotate(translate(p, {0.0f, -0.33f}), bodyAngle);
+				auto body = sdTriangle(translate(bodyP, {0.0f, 0.23f}), 0.40f, 0.70f);
+				auto collar = sdBox(translate(bodyP, {0.0f, 0.45f}), {0.22f, 0.035f});
 
 				auto shape = sdfSmoothUnion(makeBase(), body, 10.0f * smooth);
 				shape = sdfSmoothUnion(shape, collar, smooth);
 
 				// 2. Chained head coordinate frame (pivoted at collar on the body, tilting opposite)
-				auto headP = rotate(translate(bodyP, { 0.0f, 0.45f }), headCounterAngle);
-				auto headCircle = sdCircle(translate(headP, { 0.0f, 0.14f }), 0.17f);
-				auto topBall = sdCircle(translate(headP, { 0.0f, 0.34f }), 0.06f);
+				auto headP = rotate(translate(bodyP, {0.0f, 0.45f}), headCounterAngle);
+				auto headCircle = sdCircle(translate(headP, {0.0f, 0.14f}), 0.17f);
+				auto topBall = sdCircle(translate(headP, {0.0f, 0.34f}), 0.06f);
 
 				shape = sdfSmoothUnion(shape, headCircle, smooth);
 				shape = sdfSmoothUnion(shape, topBall, smooth);
@@ -244,11 +261,12 @@ namespace wchess
 			auto& t = registry.addComponent<Transform>(entity);
 			t.position = vec3(x, y, 0.0f);
 
-			CustomShape& shape = registry.addComponent<CustomShape>(entity);
+			Shape& shape = registry.addComponent<Shape>(entity);
 			shape.distanceFieldId = s_ids[indexFor(type)];
 			shape.combination = CombinationType::Addition;
 			shape.hasCollisions = false;
-			shape.material = color == Color::White ? ChessPalette::WHITE_PIECE_MATERIAL_IDX : ChessPalette::BLACK_PIECE_MATERIAL_IDX;
+			shape.material =
+				color == Color::White ? ChessPalette::WHITE_PIECE_MATERIAL_IDX : ChessPalette::BLACK_PIECE_MATERIAL_IDX;
 			shape.parameters[0] = x;
 			shape.parameters[1] = y;
 			shape.parameters[2] = scale;
@@ -264,9 +282,9 @@ namespace wchess
 			t.position = vec3(worldPos, 0.0f);
 			registry.setComponentDirty(t);
 
-			if (registry.hasComponent<CustomShape>(entity))
+			if (registry.hasComponent<Shape>(entity))
 			{
-				auto& shape = registry.getComponent<CustomShape>(entity);
+				auto& shape = registry.getComponent<Shape>(entity);
 				shape.parameters[0] = worldPos.x;
 				shape.parameters[1] = worldPos.y;
 				registry.setComponentDirty(shape);
@@ -280,9 +298,9 @@ namespace wchess
 			t.position = vec3(worldPos, 0.0f);
 			registry.setComponentDirty(t);
 
-			if (registry.hasComponent<CustomShape>(entity))
+			if (registry.hasComponent<Shape>(entity))
 			{
-				auto& shape = registry.getComponent<CustomShape>(entity);
+				auto& shape = registry.getComponent<Shape>(entity);
 				shape.parameters[0] = worldPos.x;
 				shape.parameters[1] = worldPos.y;
 				shape.parameters[2] = scale;

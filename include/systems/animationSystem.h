@@ -95,25 +95,25 @@ namespace wchess
 				if (state.checkmateJingleStep == 0 && state.checkmateJingleTimer >= 0.40f)
 				{
 					services.audio().playSound(
-						WeirdRenderer::SimpleAudioRequest{0.55f, 261.63f, false, vec3(0.0f), 3}); // Warm C4
+						SimpleAudioRequest{0.55f, 261.63f, false, vec3(0.0f), 3}); // Warm C4
 					state.checkmateJingleStep = 1;
 				}
 				if (state.checkmateJingleStep == 1 && state.checkmateJingleTimer >= 0.85f)
 				{
 					services.audio().playSound(
-						WeirdRenderer::SimpleAudioRequest{0.50f, 392.00f, false, vec3(0.0f), 3}); // Gentle G4
+						SimpleAudioRequest{0.50f, 392.00f, false, vec3(0.0f), 3}); // Gentle G4
 					state.checkmateJingleStep = 2;
 				}
 				if (state.checkmateJingleStep == 2 && state.checkmateJingleTimer >= 1.30f)
 				{
 					services.audio().playSound(
-						WeirdRenderer::SimpleAudioRequest{0.45f, 659.25f, false, vec3(0.0f), 4}); // Soft E5
+						SimpleAudioRequest{0.45f, 659.25f, false, vec3(0.0f), 4}); // Soft E5
 					state.checkmateJingleStep = 3;
 				}
 				if (state.checkmateJingleStep == 3 && state.checkmateJingleTimer >= 1.75f)
 				{
 					services.audio().playSound(
-						WeirdRenderer::SimpleAudioRequest{0.40f, 523.25f, false, vec3(0.0f), 5}); // Peaceful C5
+						SimpleAudioRequest{0.40f, 523.25f, false, vec3(0.0f), 5}); // Peaceful C5
 					state.checkmateJingleStep = 4;
 				}
 				if (state.checkmateJingleStep == 4 && state.checkmateJingleTimer >= 2.60f)
@@ -223,13 +223,13 @@ namespace wchess
 					{
 						// Deeper, heavier capture sound for Black
 						services.audio().playSound(
-							WeirdRenderer::SimpleAudioRequest{1.00f, 110.0f, false, vec3(0.0f), 4});
+							SimpleAudioRequest{1.00f, 110.0f, false, vec3(0.0f), 4});
 					}
 					else
 					{
 						// Punchy piece capture sound for White
 						services.audio().playSound(
-							WeirdRenderer::SimpleAudioRequest{0.95f, 196.0f, false, vec3(0.0f), 3});
+							SimpleAudioRequest{0.95f, 196.0f, false, vec3(0.0f), 3});
 					}
 					state.lastMoveWasCapture = false;
 					state.lastMoveDeliveredCheck = false;
@@ -238,7 +238,7 @@ namespace wchess
 				{
 					// Tension alert tone for Check (D5)
 					services.audio().playSound(
-						WeirdRenderer::SimpleAudioRequest{0.85f, 587.33f, false, vec3(0.0f), 2});
+						SimpleAudioRequest{0.85f, 587.33f, false, vec3(0.0f), 2});
 					state.lastMoveDeliveredCheck = false;
 				}
 			}

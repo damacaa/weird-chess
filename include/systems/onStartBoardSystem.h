@@ -31,7 +31,7 @@ namespace wchess
 			auto& m = services.materials2D().get(static_cast<uint16_t>(i));
 			m.color = ColorPalette::Default[i];
 		}
-		
+
 		services.materials2D().get(ChessPalette::BLACK_PIECE_MATERIAL_IDX).color = vec4(0.02f, 0.02f, 0.07f, 1.0f);
 		services.materials2D().get(ChessPalette::WHITE_PIECE_MATERIAL_IDX).color = vec4(0.93f, 0.93f, 0.90f, 1.0f);
 		services.materials2D().get(ChessPalette::PANEL_TEXT_DIM_MATERIAL_IDX).color = vec4(0.52f, 0.52f, 0.58f, 1.0f);
@@ -45,15 +45,14 @@ namespace wchess
 		// ---- load human-readable config (assets/config.json) ----
 		ChessConfig::GameSettings gameSettings = ChessConfig::loadGameSettings();
 		state.typewriterSpeed = gameSettings.typewriterSpeed;
-		WeirdEngine::Logger::log("[WeirdChess] Config loaded: difficulty='" + gameSettings.difficulty +
-								 "' (skill=" + std::to_string(gameSettings.skillLevel) +
-								 ", elo=" + std::to_string(gameSettings.elo) +
-								 "), model='" + gameSettings.modelName + "'" +
-								 ", device=" + gameSettings.device +
-								 (gameSettings.device == "gpu" ? " (" + std::to_string(gameSettings.gpuLayers) + " layers)" : "") +
-								 ", threads=" + std::to_string(gameSettings.threads) +
-								 ", seed=" + (gameSettings.seed >= 0 ? std::to_string(gameSettings.seed) : "random") +
-								 ", typewriter_speed=" + std::to_string(gameSettings.typewriterSpeed) + ")");
+		WeirdEngine::Logger::log(
+			"[WeirdChess] Config loaded: difficulty='" + gameSettings.difficulty +
+			"' (skill=" + std::to_string(gameSettings.skillLevel) + ", elo=" + std::to_string(gameSettings.elo) +
+			"), model='" + gameSettings.modelName + "'" + ", device=" + gameSettings.device +
+			(gameSettings.device == "gpu" ? " (" + std::to_string(gameSettings.gpuLayers) + " layers)" : "") +
+			", threads=" + std::to_string(gameSettings.threads) +
+			", seed=" + (gameSettings.seed >= 0 ? std::to_string(gameSettings.seed) : "random") +
+			", typewriter_speed=" + std::to_string(gameSettings.typewriterSpeed) + ")");
 
 		// Stockfish if available, otherwise our in-process MinimaxAI.
 		std::string sfPath;
@@ -102,7 +101,8 @@ namespace wchess
 		std::string modelPath;
 		if (const char* env = std::getenv(ChessConfig::LLAMA_MODEL_PATH_ENV.c_str()))
 		{
-			WeirdEngine::Logger::log("[WeirdChess] " + ChessConfig::LLAMA_MODEL_PATH_ENV + " environment override: " + env);
+			WeirdEngine::Logger::log("[WeirdChess] " + ChessConfig::LLAMA_MODEL_PATH_ENV +
+									 " environment override: " + env);
 			modelPath = env;
 		}
 		else
@@ -307,11 +307,13 @@ namespace wchess
 
 		// ---- right panel (pure story UI) ----
 		// The main header text holds the title of the story
-		state.titleText = UIButtonFactory::createText(registry, 0.0f, 0.0f, "WEIRD CHESS", ChessPalette::PANEL_TITLE_MATERIAL_IDX);
+		state.titleText =
+			UIButtonFactory::createText(registry, 0.0f, 0.0f, "WEIRD CHESS", ChessPalette::PANEL_TITLE_MATERIAL_IDX);
 
 		for (int i = 0; i < ChessConfig::STORY_MAX_LINES; ++i)
 		{
-			state.storyLines.push_back(UIButtonFactory::createText(registry, 0.0f, 0.0f, "", ChessPalette::PANEL_TEXT_MATERIAL_IDX));
+			state.storyLines.push_back(
+				UIButtonFactory::createText(registry, 0.0f, 0.0f, "", ChessPalette::PANEL_TEXT_MATERIAL_IDX));
 		}
 
 		// ---- buttons and toggles (bottom right UI strip, distinct shapes without text) ----
@@ -320,32 +322,35 @@ namespace wchess
 															ChessPalette::BUTTON_BOX_MATERIAL_IDX);
 
 		// Manual opponent override toggle: Circle shape
-		state.disableAIToggle =
-			UIButtonFactory::createToggle(registry, services.shapes(), 0.0f, 0.0f, 18.0f, ChessPalette::TOGGLE_CIRCLE_MATERIAL_IDX);
+		state.disableAIToggle = UIButtonFactory::createToggle(registry, services.shapes(), 0.0f, 0.0f, 18.0f,
+															  ChessPalette::TOGGLE_CIRCLE_MATERIAL_IDX);
 
 		// ---- promotion modal UI (centered overlay when promoting) ----
-		state.promoCard = UIButtonFactory::createBoxLine(
-			registry, services.shapes(), -1000.0f, -1000.0f, 440.0f, 160.0f, 6.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
+		state.promoCard = UIButtonFactory::createBoxLine(registry, services.shapes(), -1000.0f, -1000.0f, 440.0f,
+														 160.0f, 6.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
 		// Promotion shape buttons (Queen, Rook, Bishop, Knight - green like text)
-		state.promoQueenButton = UIButtonFactory::createPieceButton(
-			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::QUEEN], -1000.0f, -1000.0f, 50.0f,
-			ChessPalette::PANEL_TEXT_MATERIAL_IDX);
+		state.promoQueenButton =
+			UIButtonFactory::createPieceButton(registry, services.shapes(), PieceShapes::s_ids[PieceShapes::QUEEN],
+											   -1000.0f, -1000.0f, 50.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
-		state.promoRookButton = UIButtonFactory::createPieceButton(
-			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::ROOK], -1000.0f, -1000.0f, 50.0f,
-			ChessPalette::PANEL_TEXT_MATERIAL_IDX);
+		state.promoRookButton =
+			UIButtonFactory::createPieceButton(registry, services.shapes(), PieceShapes::s_ids[PieceShapes::ROOK],
+											   -1000.0f, -1000.0f, 50.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
-		state.promoBishopButton = UIButtonFactory::createPieceButton(
-			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::BISHOP], -1000.0f, -1000.0f, 50.0f,
-			ChessPalette::PANEL_TEXT_MATERIAL_IDX);
+		state.promoBishopButton =
+			UIButtonFactory::createPieceButton(registry, services.shapes(), PieceShapes::s_ids[PieceShapes::BISHOP],
+											   -1000.0f, -1000.0f, 50.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
-		state.promoKnightButton = UIButtonFactory::createPieceButton(
-			registry, services.shapes(), PieceShapes::s_ids[PieceShapes::KNIGHT], -1000.0f, -1000.0f, 50.0f,
-			ChessPalette::PANEL_TEXT_MATERIAL_IDX);
+		state.promoKnightButton =
+			UIButtonFactory::createPieceButton(registry, services.shapes(), PieceShapes::s_ids[PieceShapes::KNIGHT],
+											   -1000.0f, -1000.0f, 50.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
 		// ---- layout (positions everything) ----
 		state.lastResolutionHash = 0;
 		LayoutSystem::apply(state, registry, services);
+
+		// ---- background music ----
+		services.audio().setSong(PieceShapes::createPawnSong());
 	}
 } // namespace wchess

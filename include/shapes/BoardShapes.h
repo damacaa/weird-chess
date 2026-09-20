@@ -28,8 +28,8 @@ namespace wchess
 				float radius = parameters[4];
 				float border = parameters[5];
 
-				float worldX = parameters[Primitives::WORLD_X];
-				float worldY = parameters[Primitives::WORLD_Y];
+				float worldX = parameters[SystemParams::POINT_X];
+				float worldY = parameters[SystemParams::POINT_Y];
 
 				float dx = std::abs(worldX - px) - hw;
 				float dy = std::abs(worldY - py) - hw;
@@ -73,8 +73,8 @@ namespace wchess
 				float spacing = parameters[3];
 				float thickness = parameters[4];
 
-				float worldX = parameters[Primitives::WORLD_X];
-				float worldY = parameters[Primitives::WORLD_Y];
+				float worldX = parameters[SystemParams::POINT_X];
+				float worldY = parameters[SystemParams::POINT_Y];
 
 				float dx = std::abs(worldX - px) - hw;
 				float dy = std::abs(worldY - py) - hw;
@@ -160,22 +160,22 @@ namespace wchess
 			for (int i = 0; i < ChessConfig::MAX_TARGET_HIGHLIGHTS; ++i)
 			{
 				Entity highlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_CYAN_MATERIAL_IDX);
-				registry.setComponentDirty(registry.getComponent<CustomShape>(highlight));
+				registry.setComponentDirty(registry.getComponent<Shape>(highlight));
 				state.highlightEntities.push_back(highlight);
 			}
 
 			// Dedicated overlays with fixed colors so no shader recompilation is needed
 			state.selectionHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_GREEN_MATERIAL_IDX);
-			registry.setComponentDirty(registry.getComponent<CustomShape>(state.selectionHighlight));
+			registry.setComponentDirty(registry.getComponent<Shape>(state.selectionHighlight));
 
 			state.lastMoveFromHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_YELLOW_MATERIAL_IDX);
-			registry.setComponentDirty(registry.getComponent<CustomShape>(state.lastMoveFromHighlight));
+			registry.setComponentDirty(registry.getComponent<Shape>(state.lastMoveFromHighlight));
 
 			state.lastMoveToHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_YELLOW_MATERIAL_IDX);
-			registry.setComponentDirty(registry.getComponent<CustomShape>(state.lastMoveToHighlight));
+			registry.setComponentDirty(registry.getComponent<Shape>(state.lastMoveToHighlight));
 
 			state.checkHighlight = createHighlightShape(shapes, ChessPalette::CHECK_RED_MATERIAL_IDX);
-			registry.setComponentDirty(registry.getComponent<CustomShape>(state.checkHighlight));
+			registry.setComponentDirty(registry.getComponent<Shape>(state.checkHighlight));
 
 			return squares;
 		}
@@ -187,7 +187,7 @@ namespace wchess
 		{
 			if (highlight == INVALID_ENTITY)
 				return;
-			auto& shape = registry.getComponent<CustomShape>(highlight);
+			auto& shape = registry.getComponent<Shape>(highlight);
 			if (squareIndex < 0)
 			{
 				shape.parameters[0] = -1000.0f;
