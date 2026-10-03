@@ -6,6 +6,7 @@
 #include "config.h"
 #include "globals.h"
 #include "shapes/PieceShapes.h"
+#include "systems/frictionRig.h"
 
 #include <cmath>
 
@@ -94,26 +95,22 @@ namespace wchess
 				// Initial pause of 0.40s before first note
 				if (state.checkmateJingleStep == 0 && state.checkmateJingleTimer >= 0.40f)
 				{
-					services.audio().playSound(
-						SimpleAudioRequest{0.55f, 261.63f, false, vec3(0.0f), 3}); // Warm C4
+					services.audio().playSound(SimpleAudioRequest{0.55f, 261.63f, false, vec3(0.0f), 3}); // Warm C4
 					state.checkmateJingleStep = 1;
 				}
 				if (state.checkmateJingleStep == 1 && state.checkmateJingleTimer >= 0.85f)
 				{
-					services.audio().playSound(
-						SimpleAudioRequest{0.50f, 392.00f, false, vec3(0.0f), 3}); // Gentle G4
+					services.audio().playSound(SimpleAudioRequest{0.50f, 392.00f, false, vec3(0.0f), 3}); // Gentle G4
 					state.checkmateJingleStep = 2;
 				}
 				if (state.checkmateJingleStep == 2 && state.checkmateJingleTimer >= 1.30f)
 				{
-					services.audio().playSound(
-						SimpleAudioRequest{0.45f, 659.25f, false, vec3(0.0f), 4}); // Soft E5
+					services.audio().playSound(SimpleAudioRequest{0.45f, 659.25f, false, vec3(0.0f), 4}); // Soft E5
 					state.checkmateJingleStep = 3;
 				}
 				if (state.checkmateJingleStep == 3 && state.checkmateJingleTimer >= 1.75f)
 				{
-					services.audio().playSound(
-						SimpleAudioRequest{0.40f, 523.25f, false, vec3(0.0f), 5}); // Peaceful C5
+					services.audio().playSound(SimpleAudioRequest{0.40f, 523.25f, false, vec3(0.0f), 5}); // Peaceful C5
 					state.checkmateJingleStep = 4;
 				}
 				if (state.checkmateJingleStep == 4 && state.checkmateJingleTimer >= 2.60f)
@@ -125,7 +122,7 @@ namespace wchess
 			// ---- 3. Piece move animations & friction sound ----
 			if (state.animatingPieces.empty())
 			{
-				services.audio().setFrictionSound(0.0f);
+				FrictionRig::setLevel(registry, state, 0.0f);
 				return;
 			}
 
@@ -200,7 +197,7 @@ namespace wchess
 			}
 
 			float frictionLevel = std::clamp(totalFriction * 0.75f, 0.0f, 1.0f);
-			services.audio().setFrictionSound(frictionLevel);
+			FrictionRig::setLevel(registry, state, frictionLevel);
 
 			// Check if all piece animations are finishing this frame
 			bool willBeEmpty = true;
@@ -215,21 +212,19 @@ namespace wchess
 
 			if (willBeEmpty)
 			{
-				services.audio().setFrictionSound(0.0f);
+				FrictionRig::setLevel(registry, state, 0.0f);
 
 				if (state.lastMoveWasCapture)
 				{
 					if (state.lastMoveMover == Color::Black)
 					{
 						// Deeper, heavier capture sound for Black
-						services.audio().playSound(
-							SimpleAudioRequest{1.00f, 110.0f, false, vec3(0.0f), 4});
+						services.audio().playSound(SimpleAudioRequest{1.00f, 110.0f, false, vec3(0.0f), 4});
 					}
 					else
 					{
 						// Punchy piece capture sound for White
-						services.audio().playSound(
-							SimpleAudioRequest{0.95f, 196.0f, false, vec3(0.0f), 3});
+						services.audio().playSound(SimpleAudioRequest{0.95f, 196.0f, false, vec3(0.0f), 3});
 					}
 					state.lastMoveWasCapture = false;
 					state.lastMoveDeliveredCheck = false;
@@ -237,8 +232,7 @@ namespace wchess
 				else if (state.lastMoveDeliveredCheck)
 				{
 					// Tension alert tone for Check (D5)
-					services.audio().playSound(
-						SimpleAudioRequest{0.85f, 587.33f, false, vec3(0.0f), 2});
+					services.audio().playSound(SimpleAudioRequest{0.85f, 587.33f, false, vec3(0.0f), 2});
 					state.lastMoveDeliveredCheck = false;
 				}
 			}

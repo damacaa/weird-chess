@@ -78,9 +78,9 @@ pipeline + narrator thread. No window or ECS required.
 
 - DO NOT call `services.physics().pause()`: with the simulation paused the 2D
   world shapes stop rendering (verified empirically; the render path depends
-  on the simulation stepping). The chess game has no rigid bodies, so just
-  leave the physics running.
-- Board squares are border-only (`DefaultShapes::BOX_LINE`), never filled
+  on the simulation stepping). The only rigid body is the off-screen friction
+  proxy (systems/frictionRig.h), so just leave the physics running.
+- Board squares are border-only (`DefaultShapes::BoxLine`), never filled
   boxes: a filled square's interior SDF dominates any piece standing on it
   (both live in the same SDF group and the renderer keeps the most-negative
   distance), making pieces invisible.

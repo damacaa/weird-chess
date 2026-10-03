@@ -11,6 +11,7 @@
 #include "globals.h"
 #include "shapes/BoardShapes.h"
 #include "shapes/PieceShapes.h"
+#include "systems/frictionRig.h"
 
 namespace wchess
 {
@@ -362,9 +363,10 @@ namespace wchess
 				state.narratorImpl->setPremise(gameSettings.premise);
 			}
 
-			WeirdEngine::Logger::log("[WeirdChess] Resetting match. Config reloaded: seed=" +
-									 (gameSettings.seed >= 0 ? std::to_string(gameSettings.seed) : "random") +
-									 ", premise=" + (gameSettings.premise.empty() ? "(ai-generated)" : "'" + gameSettings.premise + "'"));
+			WeirdEngine::Logger::log(
+				"[WeirdChess] Resetting match. Config reloaded: seed=" +
+				(gameSettings.seed >= 0 ? std::to_string(gameSettings.seed) : "random") +
+				", premise=" + (gameSettings.premise.empty() ? "(ai-generated)" : "'" + gameSettings.premise + "'"));
 
 			state.board->loadStartPosition();
 			state.selectedSquare = -1;
@@ -390,7 +392,7 @@ namespace wchess
 			state.checkmateJingleTriggered = false;
 			state.checkmateJingleTimer = -1.0f;
 			state.checkmateJingleStep = 0;
-			services.audio().setFrictionSound(0.0f);
+			FrictionRig::setLevel(registry, state, 0.0f);
 
 			for (Entity captured : state.capturedPiecesPendingRemoval)
 			{

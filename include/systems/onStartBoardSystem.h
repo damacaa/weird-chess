@@ -13,6 +13,7 @@
 #include "shapes/BoardShapes.h"
 #include "shapes/PieceShapes.h"
 #include "shapes/UIButtonFactory.h"
+#include "systems/frictionRig.h"
 #include "systems/layoutSystem.h"
 #include "systems/moveSystem.h"
 
@@ -304,6 +305,9 @@ namespace wchess
 		state.squareEntities = BoardShapes::createBoard(registry, services.shapes(), state);
 		state.pieceEntities.assign(64, INVALID_ENTITY);
 		MoveSystem::syncPieces(state, registry, services.shapes());
+
+		// ---- friction audio proxy (pieces are kinematic, no rigidbodies) ----
+		FrictionRig::create(registry, services, state);
 
 		// ---- right panel (pure story UI) ----
 		// The main header text holds the title of the story

@@ -86,6 +86,10 @@ namespace wchess
 		float checkmateJingleTimer = -1.0f;
 		int checkmateJingleStep = 0;
 
+		// ---- friction audio proxy (off-screen rigidbody rubbing a rail) ----
+		Entity frictionBall = INVALID_ENTITY;
+		Entity frictionRail = INVALID_ENTITY;
+
 		// ---- annotations ----
 		MoveAnnotation lastAnnotation;
 		bool hasLastAnnotation = false;

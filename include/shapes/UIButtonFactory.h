@@ -47,7 +47,7 @@ namespace wchess
 		inline Entity createButton(Registry& registry, ShapeService& shapes, float x, float y, float w, float h,
 								   uint16_t material)
 		{
-			Entity e = shapes.addUIShape({.shapeId = DefaultShapes::BOX,
+			Entity e = shapes.addUIShape({.shapeId = DefaultShapes::Box,
 										  .variables = {x, y, w * 0.5f, h * 0.5f},
 										  .material = material,
 										  .combination = CombinationType::Addition,
@@ -65,7 +65,7 @@ namespace wchess
 		inline Entity createToggle(Registry& registry, ShapeService& shapes, float x, float y, float r,
 								   uint16_t material)
 		{
-			Entity e = shapes.addUIShape({.shapeId = DefaultShapes::CIRCLE_LINE,
+			Entity e = shapes.addUIShape({.shapeId = DefaultShapes::CircleLine,
 										  .variables = {x, y, r, 4.0f},
 										  .material = material,
 										  .combination = CombinationType::Addition,
@@ -99,7 +99,7 @@ namespace wchess
 		inline Entity createBoxLine(Registry& registry, ShapeService& shapes, float x, float y, float w, float h,
 									float thickness, uint16_t material)
 		{
-			return shapes.addUIShape({.shapeId = DefaultShapes::BOX_LINE,
+			return shapes.addUIShape({.shapeId = DefaultShapes::BoxLine,
 									  .variables = {x, y, w * 0.5f, h * 0.5f, thickness},
 									  .material = material,
 									  .combination = CombinationType::Addition,

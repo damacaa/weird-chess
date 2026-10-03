@@ -21,7 +21,10 @@ int main(int argc, char* argv[])
 	physicsSettings.gravity = 0.0f;
 
 	AudioSettings audioSettings{};
-	audioSettings.enableAmbient = false;
+	// Spatial audio would attenuate the off-screen friction proxy (see
+	// systems/frictionRig.h), so keep every voice centered like the old
+	// manual friction level.
+	audioSettings.enableSpatialAudio = false;
 
 	SceneManager& sceneManager = SceneManager::getInstance();
 	sceneManager.registerScene<wchess::ChessScene>("chess");

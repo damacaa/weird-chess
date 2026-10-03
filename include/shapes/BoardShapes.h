@@ -122,7 +122,7 @@ namespace wchess
 		{
 			float hw2 = ChessConfig::CELL * 0.46f;
 			float th = ChessConfig::CELL * 0.05f;
-			return shapes.addShape({.shapeId = DefaultShapes::BOX_LINE,
+			return shapes.addShape({.shapeId = DefaultShapes::BoxLine,
 									.variables = {-1000.0f, -1000.0f, hw2, hw2, th},
 									.material = material,
 									.combination = CombinationType::Addition,
