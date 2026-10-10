@@ -14,7 +14,7 @@ int main(int argc, char* argv[])
 	displaySettings.distanceSampleScale = 0.5f;
 	displaySettings.internalResolutionScale = 1.0f;
 	displaySettings.enableMaterialBlending = true;
-	displaySettings.uiSmoothFactor = 10.0f;
+	displaySettings.uiSmoothFactor = 5.0f;
 	displaySettings.enable2DLigthing = true;
 
 	PhysicsSettings physicsSettings{};

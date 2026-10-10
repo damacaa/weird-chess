@@ -4,7 +4,9 @@
 // (keys Q/R/B/N), deselection (Esc), all guarded by UI-click detection and
 // turn state. Uses the ShapeButton/ShapeToggle components for the UI strip.
 
-#include "components/ChessState.h"
+#include "components/BoardState.h"
+#include "components/SessionState.h"
+#include "components/StoryState.h"
 #include "globals.h"
 #include "shapes/PieceShapes.h"
 #include "systems/moveSystem.h"
@@ -32,13 +34,15 @@ namespace wchess
 
 		inline void update(Registry& registry, ServiceProvider& services)
 		{
-			ChessState& state = getState(registry);
-			if (!state.board || !state.ai || state.gameOver)
+			ChessSessionState& session = getSessionState(registry);
+			ChessBoardState& board = getBoardState(registry);
+			ChessStoryState& story = getStoryState(registry);
+			if (!session.board || !session.ai || session.gameOver)
 				return;
 
-			Color currentTurn = state.board->sideToMove();
-			Color humanColor = state.playerIsWhite ? Color::White : Color::Black;
-			Color activeColor = state.disableAI ? currentTurn : humanColor;
+			Color currentTurn = session.board->sideToMove();
+			Color humanColor = session.playerIsWhite ? Color::White : Color::Black;
+			Color activeColor = session.disableAI ? currentTurn : humanColor;
 
 			float mouseX = services.input().getMouseX();
 			float mouseY = services.input().getMouseY();
@@ -46,7 +50,7 @@ namespace wchess
 			bool isUI = services.input().isUIClick();
 
 			// ---- promotion selection (shape buttons + board square click + keyboard fallback) ----
-			if (state.awaitingPromotion)
+			if (session.awaitingPromotion)
 			{
 				PieceType chosen = PieceType::Queen;
 				bool pick = false;
@@ -62,8 +66,7 @@ namespace wchess
 				auto checkSlot = [&](Entity btn, int index, PieceType type, const char* name)
 				{
 					(void)name;
-					if (btn != INVALID_ENTITY &&
-						registry.getComponent<ShapeButton>(btn).state == ButtonState::Down)
+					if (btn != INVALID_ENTITY && registry.getComponent<ShapeButton>(btn).state == ButtonState::Down)
 					{
 						chosen = type;
 						pick = true;
@@ -80,10 +83,10 @@ namespace wchess
 					}
 				};
 
-				checkSlot(state.promoQueenButton, 0, PieceType::Queen, "Queen");
-				checkSlot(state.promoRookButton, 1, PieceType::Rook, "Rook");
-				checkSlot(state.promoBishopButton, 2, PieceType::Bishop, "Bishop");
-				checkSlot(state.promoKnightButton, 3, PieceType::Knight, "Knight");
+				checkSlot(story.promoQueenButton, 0, PieceType::Queen, "Queen");
+				checkSlot(story.promoRookButton, 1, PieceType::Rook, "Rook");
+				checkSlot(story.promoBishopButton, 2, PieceType::Bishop, "Bishop");
+				checkSlot(story.promoKnightButton, 3, PieceType::Knight, "Knight");
 
 				// Keyboard fallback
 				if (services.input().getKeyDown(Input::Q) || services.input().getKeyDown(Input::Num1))
@@ -108,36 +111,36 @@ namespace wchess
 				}
 				else if (services.input().getKeyDown(Input::Esc))
 				{
-					state.awaitingPromotion = false;
-					state.promoFrom = -1;
-					state.promoTo = -1;
-					state.selectedSquare = -1;
-					state.legalTargets.clear();
-					state.layoutDirty = true;
-					MoveSystem::refreshHighlights(state, registry, services);
+					session.awaitingPromotion = false;
+					session.promoFrom = -1;
+					session.promoTo = -1;
+					board.selectedSquare = -1;
+					board.legalTargets.clear();
+					story.layoutDirty = true;
+					MoveSystem::refreshHighlights(registry, services);
 					return;
 				}
 
 				if (pick)
 				{
 					Move move;
-					move.from = Square::fromIndex(state.promoFrom);
-					move.to = Square::fromIndex(state.promoTo);
+					move.from = Square::fromIndex(session.promoFrom);
+					move.to = Square::fromIndex(session.promoTo);
 					move.isPromotion = true;
 					move.promotion = chosen;
-					state.awaitingPromotion = false;
-					state.promoFrom = -1;
-					state.promoTo = -1;
-					state.selectedSquare = -1;
-					state.legalTargets.clear();
-					state.layoutDirty = true;
-					MoveSystem::applyMove(state, registry, services, move, activeColor);
+					session.awaitingPromotion = false;
+					session.promoFrom = -1;
+					session.promoTo = -1;
+					board.selectedSquare = -1;
+					board.legalTargets.clear();
+					story.layoutDirty = true;
+					MoveSystem::applyMove(registry, services, move, activeColor);
 				}
 				return;
 			}
 
 			// ---- only interactive if it's the active player's turn ----
-			if (state.aiThinking || (!state.disableAI && currentTurn != humanColor))
+			if (session.aiThinking || (!session.disableAI && currentTurn != humanColor))
 			{
 				return;
 			}
@@ -153,7 +156,7 @@ namespace wchess
 
 			if (autoplay)
 			{
-				auto moves = state.board->legalMoves();
+				auto moves = session.board->legalMoves();
 				if (moves.empty())
 					return;
 				static std::mt19937 rng{std::random_device{}()};
@@ -162,15 +165,15 @@ namespace wchess
 				// promote to queen when a pawn reaches the last rank
 				if (pick.isPromotion)
 					pick.promotion = PieceType::Queen;
-				MoveSystem::applyMove(state, registry, services, pick, activeColor);
+				MoveSystem::applyMove(registry, services, pick, activeColor);
 				return;
 			}
 
 			if (services.input().getKeyDown(Input::Esc))
 			{
-				state.selectedSquare = -1;
-				state.legalTargets.clear();
-				MoveSystem::refreshHighlights(state, registry, services);
+				board.selectedSquare = -1;
+				board.legalTargets.clear();
+				MoveSystem::refreshHighlights(registry, services);
 				return;
 			}
 
@@ -188,23 +191,23 @@ namespace wchess
 				return;
 			}
 
-			auto piece = state.board->pieceAt(Square::fromIndex(square));
+			auto piece = session.board->pieceAt(Square::fromIndex(square));
 
 			// ---- clicking logic ----
 			// If a piece is selected, check if the clicked square (or friendly rook for
 			// castling) is a legal move.
-			if (state.selectedSquare >= 0)
+			if (board.selectedSquare >= 0)
 			{
 				int targetSquare = square;
 
 				// Special case: if King is selected and player clicks the friendly castling
 				// Rook, map rook square to the King's castling destination square (g-file
 				// for h-rook, c-file for a-rook).
-				auto selectedPiece = state.board->pieceAt(Square::fromIndex(state.selectedSquare));
-				if (selectedPiece && selectedPiece->second == PieceType::King && piece &&
-					piece->first == activeColor && piece->second == PieceType::Rook)
+				auto selectedPiece = session.board->pieceAt(Square::fromIndex(board.selectedSquare));
+				if (selectedPiece && selectedPiece->second == PieceType::King && piece && piece->first == activeColor &&
+					piece->second == PieceType::Rook)
 				{
-					int rank = state.selectedSquare / 8;
+					int rank = board.selectedSquare / 8;
 					int rookFile = square % 8;
 					if (rookFile == 7)
 						targetSquare = rank * 8 + 6;
@@ -212,7 +215,7 @@ namespace wchess
 						targetSquare = rank * 8 + 2;
 				}
 
-				for (int target : state.legalTargets)
+				for (int target : board.legalTargets)
 				{
 					if (target == targetSquare)
 					{
@@ -220,7 +223,7 @@ namespace wchess
 						// passant, promotion)
 						Move move;
 						bool found = false;
-						for (const auto& m : state.board->legalMovesFrom(Square::fromIndex(state.selectedSquare)))
+						for (const auto& m : session.board->legalMovesFrom(Square::fromIndex(board.selectedSquare)))
 						{
 							if (m.to.index() == targetSquare)
 							{
@@ -231,27 +234,27 @@ namespace wchess
 						}
 						if (!found)
 						{
-							move.from = Square::fromIndex(state.selectedSquare);
+							move.from = Square::fromIndex(board.selectedSquare);
 							move.to = Square::fromIndex(targetSquare);
 						}
 
 						// Pawn reaching the last rank: defer until the player
 						// picks a piece via promotion shape buttons.
-						auto movingPiece = state.board->pieceAt(move.from);
+						auto movingPiece = session.board->pieceAt(move.from);
 						int promoRank = activeColor == Color::White ? 7 : 0;
 
 						if (move.to.rank == promoRank && movingPiece && movingPiece->second == PieceType::Pawn)
 						{
-							state.awaitingPromotion = true;
-							state.promoFrom = state.selectedSquare;
-							state.promoTo = targetSquare;
-							state.layoutDirty = true;
+							session.awaitingPromotion = true;
+							session.promoFrom = board.selectedSquare;
+							session.promoTo = targetSquare;
+							story.layoutDirty = true;
 							return;
 						}
 
-						state.selectedSquare = -1;
-						state.legalTargets.clear();
-						MoveSystem::applyMove(state, registry, services, move, activeColor);
+						board.selectedSquare = -1;
+						board.legalTargets.clear();
+						MoveSystem::applyMove(registry, services, move, activeColor);
 						return;
 					}
 				}
@@ -260,20 +263,20 @@ namespace wchess
 			// Clicking a piece of the active color (re)selects it.
 			if (piece && piece->first == activeColor)
 			{
-				state.selectedSquare = square;
-				state.legalTargets.clear();
-				for (const auto& m : state.board->legalMovesFrom(Square::fromIndex(square)))
+				board.selectedSquare = square;
+				board.legalTargets.clear();
+				for (const auto& m : session.board->legalMovesFrom(Square::fromIndex(square)))
 				{
-					state.legalTargets.push_back(m.to.index());
+					board.legalTargets.push_back(m.to.index());
 				}
-				MoveSystem::refreshHighlights(state, registry, services);
+				MoveSystem::refreshHighlights(registry, services);
 				return;
 			}
 
 			// Empty click on an empty/foreign square: deselect.
-			state.selectedSquare = -1;
-			state.legalTargets.clear();
-			MoveSystem::refreshHighlights(state, registry, services);
+			board.selectedSquare = -1;
+			board.legalTargets.clear();
+			MoveSystem::refreshHighlights(registry, services);
 		}
 	} // namespace InputSystem
 } // namespace wchess

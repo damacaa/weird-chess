@@ -189,7 +189,7 @@ weird-chess/
 │   │   ├── NullAI.h           # Fallback offline AI
 │   │   ├── StockfishUCIAI.h   # Stockfish UCI process controller
 │   │   └── TacticDetector.h   # Bitboard tactical detection (forks, pins, etc.)
-│   ├── components/            # ECS component definitions (ChessState, Piece, Square)
+│   ├── components/            # ECS components + scene states (Session/Board/Story, Piece, Square)
 │   ├── config.h               # Game configuration, board metrics, AI constants
 │   ├── globals.h              # Engine global definitions
 │   ├── narrator/              # Story narration interfaces & worker thread

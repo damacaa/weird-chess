@@ -7,9 +7,13 @@
 #include "chess/MinimaxAI.h"
 #include "chess/NullAI.h"
 #include "chess/StockfishUCIAI.h"
-#include "components/ChessState.h"
+#include "components/BoardState.h"
+#include "components/SessionState.h"
+#include "components/StoryState.h"
 #include "config.h"
 #include "globals.h"
+#include "narrator/LlamaNarrator.h"
+#include "narrator/PassThroughNarrator.h"
 #include "shapes/BoardShapes.h"
 #include "shapes/PieceShapes.h"
 #include "shapes/UIButtonFactory.h"
@@ -24,7 +28,9 @@ namespace wchess
 {
 	inline void onStartBoardSystem(Registry& registry, ServiceProvider& services)
 	{
-		ChessState& state = getState(registry);
+		ChessSessionState& session = getSessionState(registry);
+		ChessBoardState& board = getBoardState(registry);
+		ChessStoryState& story = getStoryState(registry);
 
 		// ---- 2D materials ----
 		for (size_t i = 0; i < ColorPalette::Default.size() && i < 16; ++i)
@@ -40,12 +46,12 @@ namespace wchess
 		services.materials2D().get(ChessPalette::DARK_SQUARE_MATERIAL_IDX).color = vec4(0.50f, 0.37f, 0.24f, 1.0f);
 
 		// ---- board rules + AI ----
-		state.board = std::make_shared<ChessLibBoard>();
-		state.board->loadStartPosition();
+		session.board = std::make_shared<ChessLibBoard>();
+		session.board->loadStartPosition();
 
 		// ---- load human-readable config (assets/config.json) ----
 		ChessConfig::GameSettings gameSettings = ChessConfig::loadGameSettings();
-		state.typewriterSpeed = gameSettings.typewriterSpeed;
+		story.typewriterSpeed = gameSettings.typewriterSpeed;
 		WeirdEngine::Logger::log(
 			"[WeirdChess] Config loaded: difficulty='" + gameSettings.difficulty +
 			"' (skill=" + std::to_string(gameSettings.skillLevel) + ", elo=" + std::to_string(gameSettings.elo) +
@@ -81,21 +87,21 @@ namespace wchess
 			if (stockfish->isAvailable())
 			{
 				stockfish->setStrength(gameSettings.skillLevel, gameSettings.elo);
-				state.ai = stockfish;
+				session.ai = stockfish;
 			}
 		}
-		if (!state.ai)
+		if (!session.ai)
 		{
 			WeirdEngine::Logger::log("[WeirdChess] Stockfish binary not found, using in-process MinimaxAI.");
 			auto minimax = std::make_shared<MinimaxAI>();
 			minimax->setStrength(gameSettings.skillLevel, gameSettings.elo);
-			state.ai = minimax;
+			session.ai = minimax;
 		}
 
 		// Background annotation worker: keeps move evaluations off the main
 		// thread so pieces animate immediately after a move.
-		state.annotator = std::make_shared<AsyncAnnotator>(state.ai);
-		state.annotator->start();
+		session.annotator = std::make_shared<AsyncAnnotator>(session.ai);
+		session.annotator->start();
 
 		// ---- narrator (worker thread) ----
 		// Model discovery: look for configured modelName or any .gguf files
@@ -185,26 +191,26 @@ namespace wchess
 		}
 		if (!modelPath.empty() && llama->load(modelPath))
 		{
-			state.narratorImpl = llama;
+			session.narratorImpl = llama;
 		}
 		else
 		{
 			WeirdEngine::Logger::log("[WeirdChess] Falling back to engine move annotation narrator.");
-			state.narratorImpl = std::make_shared<PassThroughNarrator>();
+			session.narratorImpl = std::make_shared<PassThroughNarrator>();
 		}
 
 		if (gameSettings.seed >= 0)
 		{
-			state.narratorImpl->setSeed(gameSettings.seed);
+			session.narratorImpl->setSeed(gameSettings.seed);
 		}
 		if (!gameSettings.premise.empty())
 		{
-			state.narratorImpl->setPremise(gameSettings.premise);
+			session.narratorImpl->setPremise(gameSettings.premise);
 		}
 
-		state.narrator = std::make_shared<NarratorThread>(state.narratorImpl);
-		state.narrator->start();
-		state.narrator->pushIntro();
+		session.narrator = std::make_shared<NarratorThread>(session.narratorImpl);
+		session.narrator->start();
+		session.narrator->pushIntro();
 
 		// ---- background + text sizes ----
 		auto& bg = services.render().getBackground();
@@ -301,58 +307,58 @@ namespace wchess
 		BoardShapes::registerAll(services.shapes());
 
 		// ---- pieces pool & board ----
-		PieceShapes::initPiecePool(registry, services.shapes(), state.allPieceEntities, ChessConfig::PIECE_SCALE);
-		state.squareEntities = BoardShapes::createBoard(registry, services.shapes(), state);
-		state.pieceEntities.assign(64, INVALID_ENTITY);
-		MoveSystem::syncPieces(state, registry, services.shapes());
+		PieceShapes::initPiecePool(registry, services.shapes(), board.allPieceEntities, ChessConfig::PIECE_SCALE);
+		board.squareEntities = BoardShapes::createBoard(registry, services.shapes(), board);
+		board.pieceEntities.assign(64, INVALID_ENTITY);
+		MoveSystem::syncPieces(registry, services.shapes());
 
 		// ---- friction audio proxy (pieces are kinematic, no rigidbodies) ----
-		FrictionRig::create(registry, services, state);
+		FrictionRig::create(registry, services);
 
 		// ---- right panel (pure story UI) ----
 		// The main header text holds the title of the story
-		state.titleText =
+		story.titleText =
 			UIButtonFactory::createText(registry, 0.0f, 0.0f, "WEIRD CHESS", ChessPalette::PANEL_TITLE_MATERIAL_IDX);
 
 		for (int i = 0; i < ChessConfig::STORY_MAX_LINES; ++i)
 		{
-			state.storyLines.push_back(
+			story.storyLines.push_back(
 				UIButtonFactory::createText(registry, 0.0f, 0.0f, "", ChessPalette::PANEL_TEXT_MATERIAL_IDX));
 		}
 
 		// ---- buttons and toggles (bottom right UI strip, distinct shapes without text) ----
 		// Reset button: Square Box shape
-		state.newGameButton = UIButtonFactory::createButton(registry, services.shapes(), 0.0f, 0.0f, 40.0f, 40.0f,
+		story.newGameButton = UIButtonFactory::createButton(registry, services.shapes(), 0.0f, 0.0f, 40.0f, 40.0f,
 															ChessPalette::BUTTON_BOX_MATERIAL_IDX);
 
 		// Manual opponent override toggle: Circle shape
-		state.disableAIToggle = UIButtonFactory::createToggle(registry, services.shapes(), 0.0f, 0.0f, 18.0f,
+		story.disableAIToggle = UIButtonFactory::createToggle(registry, services.shapes(), 0.0f, 0.0f, 18.0f,
 															  ChessPalette::TOGGLE_CIRCLE_MATERIAL_IDX);
 
 		// ---- promotion modal UI (centered overlay when promoting) ----
-		state.promoCard = UIButtonFactory::createBoxLine(registry, services.shapes(), -1000.0f, -1000.0f, 440.0f,
+		story.promoCard = UIButtonFactory::createBoxLine(registry, services.shapes(), -1000.0f, -1000.0f, 440.0f,
 														 160.0f, 6.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
 		// Promotion shape buttons (Queen, Rook, Bishop, Knight - green like text)
-		state.promoQueenButton =
+		story.promoQueenButton =
 			UIButtonFactory::createPieceButton(registry, services.shapes(), PieceShapes::s_ids[PieceShapes::QUEEN],
 											   -1000.0f, -1000.0f, 50.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
-		state.promoRookButton =
+		story.promoRookButton =
 			UIButtonFactory::createPieceButton(registry, services.shapes(), PieceShapes::s_ids[PieceShapes::ROOK],
 											   -1000.0f, -1000.0f, 50.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
-		state.promoBishopButton =
+		story.promoBishopButton =
 			UIButtonFactory::createPieceButton(registry, services.shapes(), PieceShapes::s_ids[PieceShapes::BISHOP],
 											   -1000.0f, -1000.0f, 50.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
-		state.promoKnightButton =
+		story.promoKnightButton =
 			UIButtonFactory::createPieceButton(registry, services.shapes(), PieceShapes::s_ids[PieceShapes::KNIGHT],
 											   -1000.0f, -1000.0f, 50.0f, ChessPalette::PANEL_TEXT_MATERIAL_IDX);
 
 		// ---- layout (positions everything) ----
-		state.lastResolutionHash = 0;
-		LayoutSystem::apply(state, registry, services);
+		story.lastResolutionHash = 0;
+		LayoutSystem::apply(registry, services);
 
 		// ---- background music ----
 		services.audio().setSong(PieceShapes::createPawnSong());

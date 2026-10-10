@@ -6,7 +6,8 @@
 // The engine's ButtonSystem already flips ShapeToggle::active and reports
 // ShapeButton::state; this system only reacts to those changes.
 
-#include "components/ChessState.h"
+#include "components/SessionState.h"
+#include "components/StoryState.h"
 #include "config.h"
 #include "globals.h"
 #include "systems/moveSystem.h"
@@ -17,22 +18,23 @@ namespace wchess
 	{
 		inline void update(Registry& registry, ServiceProvider& services)
 		{
-			ChessState& state = getState(registry);
-			if (!state.board)
+			ChessSessionState& session = getSessionState(registry);
+			ChessStoryState& story = getStoryState(registry);
+			if (!session.board)
 				return;
 
 			// New game.
-			if (state.newGameButton != INVALID_ENTITY &&
-				registry.getComponent<ShapeButton>(state.newGameButton).state == ButtonState::Down)
+			if (story.newGameButton != INVALID_ENTITY &&
+				registry.getComponent<ShapeButton>(story.newGameButton).state == ButtonState::Down)
 			{
-				MoveSystem::resetGame(state, registry, services);
+				MoveSystem::resetGame(registry, services);
 			}
 
 			// Disable AI toggle: when active, human controls both players' pieces.
-			if (state.disableAIToggle != INVALID_ENTITY)
+			if (story.disableAIToggle != INVALID_ENTITY)
 			{
-				auto& toggle = registry.getComponent<ShapeToggle>(state.disableAIToggle);
-				state.disableAI = toggle.active;
+				auto& toggle = registry.getComponent<ShapeToggle>(story.disableAIToggle);
+				session.disableAI = toggle.active;
 			}
 		}
 	} // namespace UISystem

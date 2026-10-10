@@ -1,13 +1,13 @@
 #pragma once
 
 // Layout: computes the camera framing so the board fills the left half of the
-// window, positions the world-space rank/file labels and every right-panel UI
-// entity in screen space. Mirrors weird-golfing's approach: a resolution hash
-// is compared every frame and everything is repositioned when it changes.
-// The weird-engine UI is not responsive by itself, so ALL screen-space
-// placement is recomputed here.
+// window and positions every right-panel UI entity in screen space. Mirrors
+// weird-golfing's approach: a resolution hash is compared every frame and
+// everything is repositioned when it changes. The weird-engine UI is not
+// responsive by itself, so ALL screen-space placement is recomputed here.
 
-#include "components/ChessState.h"
+#include "components/SessionState.h"
+#include "components/StoryState.h"
 #include "config.h"
 #include "globals.h"
 #include "shapes/UIButtonFactory.h"
@@ -39,8 +39,11 @@ namespace wchess
 
 		// Recomputes the camera and every UI element. Called on start and
 		// whenever the window size changes.
-		inline void apply(ChessState& state, Registry& registry, ServiceProvider& services)
+		inline void apply(Registry& registry, ServiceProvider& services)
 		{
+			ChessSessionState& session = getSessionState(registry);
+			ChessStoryState& story = getStoryState(registry);
+
 			const float width = static_cast<float>(Display::width);
 			const float height = static_cast<float>(Display::height);
 			const float halfW = width * 0.5f;
@@ -72,45 +75,26 @@ namespace wchess
 			auto& uiCtx = services.render().getContextUI();
 			const float pitch = static_cast<float>(uiCtx.font.getCharHeight()) * 2.0f * uiCtx.dotRadious + 6.0f;
 
-			if (state.titleText != INVALID_ENTITY)
+			if (story.titleText != INVALID_ENTITY)
 			{
-				auto& t = registry.getComponent<Transform>(state.titleText);
+				auto& t = registry.getComponent<Transform>(story.titleText);
 				t.position = vec3(panelLeft, panelTop, 0.0f);
-				registry.setComponentDirty(t);
-			}
-			if (state.storyTitle != INVALID_ENTITY)
-			{
-				auto& t = registry.getComponent<Transform>(state.storyTitle);
-				t.position = vec3(panelLeft, panelTop - pitch, 0.0f);
-				registry.setComponentDirty(t);
-			}
-			if (state.statusText != INVALID_ENTITY)
-			{
-				auto& t = registry.getComponent<Transform>(state.statusText);
-				t.position = vec3(panelLeft, panelTop - 2.0f * pitch, 0.0f);
-				registry.setComponentDirty(t);
-			}
-			if (state.storyStatus != INVALID_ENTITY)
-			{
-				auto& t = registry.getComponent<Transform>(state.storyStatus);
-				t.position = vec3(panelLeft, panelTop - 3.0f * pitch, 0.0f);
 				registry.setComponentDirty(t);
 			}
 
 			const float storyTop = panelTop - 1.5f * pitch;
 			const float storyBottomMargin = 64.0f;
 			const int visible = std::clamp(static_cast<int>((storyTop - storyBottomMargin) / pitch), 1,
-										   static_cast<int>(state.storyLines.size()));
-			state.storyVisibleLines = visible;
-			for (size_t i = 0; i < state.storyLines.size(); ++i)
+										   static_cast<int>(story.storyLines.size()));
+			story.storyVisibleLines = visible;
+			for (size_t i = 0; i < story.storyLines.size(); ++i)
 			{
-				auto& t = registry.getComponent<Transform>(state.storyLines[i]);
-				t.position =
-					vec3(panelLeft,
-						 (!state.awaitingPromotion && i < static_cast<size_t>(visible))
-							 ? storyTop - static_cast<float>(i) * pitch
-							 : -1000.0f,
-						 0.0f);
+				auto& t = registry.getComponent<Transform>(story.storyLines[i]);
+				t.position = vec3(panelLeft,
+								  (!session.awaitingPromotion && i < static_cast<size_t>(visible))
+									  ? storyTop - static_cast<float>(i) * pitch
+									  : -1000.0f,
+								  0.0f);
 				registry.setComponentDirty(t);
 			}
 
@@ -118,16 +102,16 @@ namespace wchess
 			const float buttonY = 32.0f;
 			const float newGameX = width - 100.0f;
 			const float toggleX = newGameX + 60.0f;
-			if (state.newGameButton != INVALID_ENTITY)
+			if (story.newGameButton != INVALID_ENTITY)
 			{
-				auto& shape = registry.getComponent<UIShape>(state.newGameButton);
+				auto& shape = registry.getComponent<UIShape>(story.newGameButton);
 				shape.parameters[0] = newGameX;
 				shape.parameters[1] = buttonY;
 				registry.setComponentDirty(shape);
 			}
-			if (state.disableAIToggle != INVALID_ENTITY)
+			if (story.disableAIToggle != INVALID_ENTITY)
 			{
-				auto& shape = registry.getComponent<UIShape>(state.disableAIToggle);
+				auto& shape = registry.getComponent<UIShape>(story.disableAIToggle);
 				shape.parameters[0] = toggleX;
 				shape.parameters[1] = buttonY;
 				registry.setComponentDirty(shape);
@@ -139,19 +123,19 @@ namespace wchess
 			const float promoStartX = panelCenterX - 1.5f * promoSpacing;
 			const float promoY = halfH;
 
-			if (state.promoCard != INVALID_ENTITY)
+			if (story.promoCard != INVALID_ENTITY)
 			{
-				auto& shape = registry.getComponent<UIShape>(state.promoCard);
-				shape.parameters[0] = state.awaitingPromotion ? panelCenterX : -1000.0f;
-				shape.parameters[1] = state.awaitingPromotion ? halfH : -1000.0f;
+				auto& shape = registry.getComponent<UIShape>(story.promoCard);
+				shape.parameters[0] = session.awaitingPromotion ? panelCenterX : -1000.0f;
+				shape.parameters[1] = session.awaitingPromotion ? halfH : -1000.0f;
 				registry.setComponentDirty(shape);
 			}
 
 			auto updatePromoSlot = [&](Entity btn, int index)
 			{
 				float posX =
-					state.awaitingPromotion ? promoStartX + static_cast<float>(index) * promoSpacing : -1000.0f;
-				float posY = state.awaitingPromotion ? promoY : -1000.0f;
+					session.awaitingPromotion ? promoStartX + static_cast<float>(index) * promoSpacing : -1000.0f;
+				float posY = session.awaitingPromotion ? promoY : -1000.0f;
 
 				if (btn != INVALID_ENTITY)
 				{
@@ -162,35 +146,28 @@ namespace wchess
 				}
 			};
 
-			updatePromoSlot(state.promoQueenButton, 0);
-			updatePromoSlot(state.promoRookButton, 1);
-			updatePromoSlot(state.promoBishopButton, 2);
-			updatePromoSlot(state.promoKnightButton, 3);
+			updatePromoSlot(story.promoQueenButton, 0);
+			updatePromoSlot(story.promoRookButton, 1);
+			updatePromoSlot(story.promoBishopButton, 2);
+			updatePromoSlot(story.promoKnightButton, 3);
 
-			// --- move log (top-left, above the board) ---
-			if (state.moveLogText != INVALID_ENTITY)
-			{
-				auto& t = registry.getComponent<Transform>(state.moveLogText);
-				t.position = vec3(10.0f, height - 14.0f, 0.0f);
-				registry.setComponentDirty(t);
-			}
-
-			state.layoutDirty = false;
+			story.layoutDirty = false;
 			services.render().forceShaderRefresh2D();
 			services.render().forceShaderRefreshUI();
 		}
 
 		inline void update(Registry& registry, ServiceProvider& services)
 		{
-			ChessState& state = getState(registry);
+			ChessSessionState& session = getSessionState(registry);
+			ChessStoryState& story = getStoryState(registry);
 
 			int hash = (Display::width << 16) ^ Display::height;
 			static bool s_lastPromo = false;
-			if (state.lastResolutionHash != hash || state.layoutDirty || s_lastPromo != state.awaitingPromotion)
+			if (story.lastResolutionHash != hash || story.layoutDirty || s_lastPromo != session.awaitingPromotion)
 			{
-				s_lastPromo = state.awaitingPromotion;
-				state.lastResolutionHash = hash;
-				apply(state, registry, services);
+				s_lastPromo = session.awaitingPromotion;
+				story.lastResolutionHash = hash;
+				apply(registry, services);
 			}
 		}
 	} // namespace LayoutSystem

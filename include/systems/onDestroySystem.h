@@ -3,34 +3,34 @@
 // onDestroy: stops the narrator worker thread and shuts down the AI
 // subprocess cleanly so the app never leaks threads or processes.
 
-#include "components/ChessState.h"
+#include "components/SessionState.h"
 #include "globals.h"
 
 namespace wchess
 {
 	inline void onDestroySystem(Registry& registry, ServiceProvider& services)
 	{
-		ChessState& state = getState(registry);
+		ChessSessionState& session = getSessionState(registry);
 
-		if (state.narrator)
+		if (session.narrator)
 		{
-			state.narrator->stop();
-			state.narrator.reset();
+			session.narrator->stop();
+			session.narrator.reset();
 		}
-		state.narratorImpl.reset();
+		session.narratorImpl.reset();
 
-		if (state.annotator)
+		if (session.annotator)
 		{
-			state.annotator->stop();
-			state.annotator.reset();
+			session.annotator->stop();
+			session.annotator.reset();
 		}
 
-		if (state.ai)
+		if (session.ai)
 		{
-			state.ai->shutdown();
-			state.ai.reset();
+			session.ai->shutdown();
+			session.ai.reset();
 		}
-		state.board.reset();
+		session.board.reset();
 
 		std::cout << "[WeirdChess] scene destroyed" << std::endl;
 	}

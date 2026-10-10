@@ -42,13 +42,20 @@ pipeline + narrator thread. No window or ECS required.
   `MoveSystem::syncPieces` (reusing a fixed pre-allocated pool of persistent
   entities and moving unused/captured pieces off-screen, so no entities are
   created or destroyed during moves).
+- Scene state is split across three registry-owned states under
+  `components/`: `ChessSessionState` (rules, AI, workers, match flow),
+  `ChessBoardState` (board entity handles, selection, friction rig) and
+  `ChessStoryState` (story text, UI handles, layout). Per-piece animation
+  lives on `PieceComp` and is advanced by `AnimationSystem` via
+  `registry.forEach<PieceComp>` - do not reintroduce parallel animation
+  arrays in the scene state.
 - Move application is split: `MoveSystem::applyMove` applies the move and
   starts the piece animation IMMEDIATELY, then queues the annotation on the
   `AsyncAnnotator` worker thread (chess/AsyncAnnotator.h). The annotation is
   published by `AnnotationSystem::update` when ready. The AI reply
   (`AISystem::update`) waits for both the annotation and the animation
-  (`!moveAppliedPendingAnnotation && animatingPieces.empty()`), so the
-  player's piece never waits for the opponent.
+  (`!session.moveAppliedPendingAnnotation && !PieceShapes::anyPieceAnimating(registry)`),
+  so the player's piece never waits for the opponent.
 - The annotation worker is the only caller of `IChessAI::evaluate` while a
   job is in flight: the main thread must not talk to the engine concurrently
   (aiSystem and the strength toggle are gated on the pending flag).

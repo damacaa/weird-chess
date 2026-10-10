@@ -62,4 +62,4 @@ and put the executable at `bin/stockfish`. The binary is gitignored.
 
 - Move evaluations for centipawn loss and annotations are performed asynchronously on the `AsyncAnnotator` worker thread (`include/chess/AsyncAnnotator.h`). This ensures move animations start immediately on frame 0 without stalling the render loop.
 - `IChessAI::evaluate()` must be thread-safe or only invoked by the `AsyncAnnotator` worker while an evaluation job is in flight.
-- The AI turn (`AISystem::update`) and user move inputs are gated until both the animation and background annotation have completed (`!state.moveAppliedPendingAnnotation && state.animatingPieces.empty()`).
+- The AI turn (`AISystem::update`) and user move inputs are gated until both the animation and background annotation have completed (`!session.moveAppliedPendingAnnotation && !PieceShapes::anyPieceAnimating(registry)`).

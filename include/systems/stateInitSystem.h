@@ -1,17 +1,21 @@
 #pragma once
 
-// stateInit: creates the ChessState scene state (registered as the first
-// start system).
+// stateInit: creates the scene states (session, board, story). Registered as
+// the first start system so it runs before every other system.
 
-#include "components/ChessState.h"
+#include "components/BoardState.h"
+#include "components/SessionState.h"
+#include "components/StoryState.h"
 #include "globals.h"
 
 namespace wchess
 {
 	inline void stateInitSystem(Registry& registry, ServiceProvider& services)
 	{
-		ChessState& state = registry.emplaceState<ChessState>();
-		state.lastResolutionHash = 0;
-		state.layoutDirty = true;
+		registry.emplaceState<ChessSessionState>();
+		registry.emplaceState<ChessBoardState>();
+		ChessStoryState& story = registry.emplaceState<ChessStoryState>();
+		story.lastResolutionHash = 0;
+		story.layoutDirty = true;
 	}
 } // namespace wchess

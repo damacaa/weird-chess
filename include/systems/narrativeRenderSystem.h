@@ -1,11 +1,11 @@
 #pragma once
 
 // Drains the narrator's StoryStream on the main thread and displays it in the
-// right panel (one UITextRenderer per line). Also updates the status bar and
-// the move log. All text content updates happen here; positions come from the
-// layout system.
+// right panel (one UITextRenderer per line). All text content updates happen
+// here; positions come from the layout system.
 
-#include "components/ChessState.h"
+#include "components/SessionState.h"
+#include "components/StoryState.h"
 #include "config.h"
 #include "globals.h"
 
@@ -173,81 +173,77 @@ namespace wchess
 
 		inline void update(Registry& registry, ServiceProvider& services)
 		{
-			ChessState& state = getState(registry);
-			if (state.storyLines.empty())
+			ChessSessionState& session = getSessionState(registry);
+			ChessStoryState& story = getStoryState(registry);
+			if (story.storyLines.empty())
 				return;
 
 			const int wrapChars = calculateWrapChars(services);
 
 			bool dirtyLines = false;
 			// Sync anything the narrator produced/streamed this frame.
-			if (state.narrator)
+			if (session.narrator)
 			{
 				std::vector<std::string> updatedChunks;
-				if (state.narrator->stream()->getChunks(updatedChunks))
+				if (session.narrator->stream()->getChunks(updatedChunks))
 				{
 					dirtyLines = true;
-					state.rawStoryChunks = std::move(updatedChunks);
+					story.rawStoryChunks = std::move(updatedChunks);
 				}
 			}
 
-			if (dirtyLines || wrapChars != state.lastWrapChars || state.layoutDirty)
+			if (dirtyLines || wrapChars != story.lastWrapChars || story.layoutDirty)
 			{
-				bool isResizeOnly = !dirtyLines && (wrapChars != state.lastWrapChars || state.layoutDirty);
-				state.lastWrapChars = wrapChars;
-				state.layoutDirty = false;
-				state.formattedStoryLines = formatStoryLines(state.rawStoryChunks, wrapChars);
-				size_t newTotalChars = countTotalChars(state.formattedStoryLines);
+				bool isResizeOnly = !dirtyLines && (wrapChars != story.lastWrapChars || story.layoutDirty);
+				story.lastWrapChars = wrapChars;
+				story.layoutDirty = false;
+				story.formattedStoryLines = formatStoryLines(story.rawStoryChunks, wrapChars);
+				size_t newTotalChars = countTotalChars(story.formattedStoryLines);
 
-				if (isResizeOnly && state.lastTotalStoryChars > 0 &&
-					state.storyRevealedChars >= static_cast<float>(state.lastTotalStoryChars))
+				if (isResizeOnly && story.lastTotalStoryChars > 0 &&
+					story.storyRevealedChars >= static_cast<float>(story.lastTotalStoryChars))
 				{
 					// If all text was already fully revealed and only the window resized, keep it revealed
-					state.storyRevealedChars = static_cast<float>(newTotalChars);
+					story.storyRevealedChars = static_cast<float>(newTotalChars);
 				}
 				else
 				{
 					// For new chunks or in-progress typing, clamp to new total without jumping ahead
-					state.storyRevealedChars = std::min(state.storyRevealedChars, static_cast<float>(newTotalChars));
+					story.storyRevealedChars = std::min(story.storyRevealedChars, static_cast<float>(newTotalChars));
 				}
-				state.lastTotalStoryChars = newTotalChars;
+				story.lastTotalStoryChars = newTotalChars;
 			}
 
-			const size_t totalChars = state.lastTotalStoryChars;
+			const size_t totalChars = story.lastTotalStoryChars;
 
 			// Progress the char-by-char typewriter effect strictly respecting typewriter speed
-			if (state.storyRevealedChars < static_cast<float>(totalChars))
+			if (story.storyRevealedChars < static_cast<float>(totalChars))
 			{
 				float dt = std::clamp(services.time().deltaTime(), 0.0f, 0.1f);
-				float speed = state.typewriterSpeed > 0.0f ? state.typewriterSpeed
-														   : ChessConfig::STORY_TYPEWRITER_MIN_SPEED;
-				state.storyRevealedChars =
-					std::min(static_cast<float>(totalChars), state.storyRevealedChars + speed * dt);
+				float speed =
+					story.typewriterSpeed > 0.0f ? story.typewriterSpeed : ChessConfig::STORY_TYPEWRITER_MIN_SPEED;
+				story.storyRevealedChars =
+					std::min(static_cast<float>(totalChars), story.storyRevealedChars + speed * dt);
 			}
 
 			// Render the displayed lines based on current revealed character count
 			std::vector<std::string> displayedLines =
-				buildTypewriterLines(state.formattedStoryLines, static_cast<size_t>(state.storyRevealedChars));
+				buildTypewriterLines(story.formattedStoryLines, static_cast<size_t>(story.storyRevealedChars));
 
 			// Keep only the visible window of lines (tail)
-			size_t startLineIdx = displayedLines.size() > static_cast<size_t>(state.storyVisibleLines)
-									  ? displayedLines.size() - static_cast<size_t>(state.storyVisibleLines)
+			size_t startLineIdx = displayedLines.size() > static_cast<size_t>(story.storyVisibleLines)
+									  ? displayedLines.size() - static_cast<size_t>(story.storyVisibleLines)
 									  : 0;
 
-			state.storyText.clear();
-			for (size_t i = 0; i < state.storyLines.size(); ++i)
+			for (size_t i = 0; i < story.storyLines.size(); ++i)
 			{
 				size_t lineIdx = startLineIdx + i;
 				std::string content =
-					(i < static_cast<size_t>(state.storyVisibleLines) && lineIdx < displayedLines.size())
+					(i < static_cast<size_t>(story.storyVisibleLines) && lineIdx < displayedLines.size())
 						? displayedLines[lineIdx]
 						: "";
-				if (i < static_cast<size_t>(state.storyVisibleLines) && lineIdx < displayedLines.size())
-				{
-					state.storyText.push_back(content);
-				}
 
-				auto& text = registry.getComponent<UITextRenderer>(state.storyLines[i]);
+				auto& text = registry.getComponent<UITextRenderer>(story.storyLines[i]);
 				if (text.text != content)
 				{
 					text.text = content;
@@ -256,109 +252,13 @@ namespace wchess
 			}
 
 			// ---- title header (alerts when promoting) ----
-			if (state.titleText != INVALID_ENTITY)
+			if (story.titleText != INVALID_ENTITY)
 			{
-				auto& text = registry.getComponent<UITextRenderer>(state.titleText);
-				std::string title = state.awaitingPromotion ? ">> CHOOSE PROMOTION PIECE <<" : "WEIRD CHESS";
+				auto& text = registry.getComponent<UITextRenderer>(story.titleText);
+				std::string title = session.awaitingPromotion ? ">> CHOOSE PROMOTION PIECE <<" : "WEIRD CHESS";
 				if (text.text != title)
 				{
 					text.text = title;
-					registry.setComponentDirty(text);
-				}
-			}
-
-			// ---- status bar ----
-			if (state.statusText != INVALID_ENTITY)
-			{
-				std::string status;
-				if (state.gameOver)
-				{
-					switch (state.board->gameState())
-					{
-						case GameState::Checkmate:
-							status = state.board->sideToMove() == Color::White ? "CHECKMATE - BLACK WINS"
-																			   : "CHECKMATE - WHITE WINS";
-							break;
-						case GameState::Stalemate:
-							status = "STALEMATE - DRAW";
-							break;
-						default:
-							status = "DRAW";
-							break;
-					}
-				}
-				else if (state.awaitingPromotion)
-				{
-					status = "PROMOTE: Q R B N (KEYS)";
-				}
-				else if (state.aiThinking)
-				{
-					status = "AI THINKING...";
-				}
-				else if (state.hasLastAnnotation)
-				{
-					status = state.lastAnnotation.title + " " + state.lastAnnotation.san;
-				}
-				else if (state.disableAI)
-				{
-					status = state.board->sideToMove() == Color::White ? "WHITE TO MOVE" : "BLACK TO MOVE";
-				}
-				else
-				{
-					status = state.board->sideToMove() == (state.playerIsWhite ? Color::White : Color::Black)
-								 ? "YOUR TURN"
-								 : "AI TURN";
-				}
-
-				auto& text = registry.getComponent<UITextRenderer>(state.statusText);
-				if (text.text != status)
-				{
-					text.text = status;
-					registry.setComponentDirty(text);
-				}
-			}
-
-			// ---- story status ----
-			if (state.storyStatus != INVALID_ENTITY && state.narrator)
-			{
-				std::string s;
-				switch (state.narrator->stream()->status())
-				{
-					case StoryStatus::EndedAbruptly:
-						s = "THE STORY ENDS ABRUPTLY";
-						break;
-					case StoryStatus::EndedNaturally:
-						s = "THE STORY SETTLES";
-						break;
-					case StoryStatus::Generating:
-						s = "THE STORY UNFOLDS...";
-						break;
-					default:
-						s = "AWAITING THE STORY...";
-						break;
-				}
-				auto& text = registry.getComponent<UITextRenderer>(state.storyStatus);
-				if (text.text != s)
-				{
-					text.text = s;
-					registry.setComponentDirty(text);
-				}
-			}
-
-			// ---- move log ----
-			if (state.moveLogText != INVALID_ENTITY)
-			{
-				std::string log;
-				for (size_t i2 = 0; i2 < state.moveLog.size(); ++i2)
-				{
-					if (i2 > 0)
-						log += "  ";
-					log += state.moveLog[i2];
-				}
-				auto& text = registry.getComponent<UITextRenderer>(state.moveLogText);
-				if (text.text != log)
-				{
-					text.text = log;
 					registry.setComponentDirty(text);
 				}
 			}

@@ -2,33 +2,33 @@
 
 // Debug overlay: engine + game state, useful while developing.
 
-#include "components/ChessState.h"
+#include "components/SessionState.h"
 #include "globals.h"
 
 namespace wchess
 {
 	inline void imGuiSystem(Registry& registry, ServiceProvider& services)
 	{
-		ChessState& state = getState(registry);
+		ChessSessionState& session = getSessionState(registry);
 
 		ImGui::Text("Weird Chess");
 		ImGui::Separator();
-		if (state.board)
+		if (session.board)
 		{
-			ImGui::Text("FEN: %s", state.board->getFen().c_str());
-			ImGui::Text("Turn: %s", state.board->sideToMove() == Color::White ? "White" : "Black");
-			ImGui::Text("Halfmove clock: %d", state.board->halfMoveClock());
-			ImGui::Text("Fullmove: %d", state.board->fullMoveNumber());
+			ImGui::Text("FEN: %s", session.board->getFen().c_str());
+			ImGui::Text("Turn: %s", session.board->sideToMove() == Color::White ? "White" : "Black");
+			ImGui::Text("Halfmove clock: %d", session.board->halfMoveClock());
+			ImGui::Text("Fullmove: %d", session.board->fullMoveNumber());
 		}
-		ImGui::Text("AI: %s", state.ai ? state.ai->name().c_str() : "none");
-		ImGui::Text("Narrator: %s", state.narrator ? state.narrator->narratorName().c_str() : "none");
-		if (state.hasLastAnnotation)
+		ImGui::Text("AI: %s", session.ai ? session.ai->name().c_str() : "none");
+		ImGui::Text("Narrator: %s", session.narrator ? session.narrator->narratorName().c_str() : "none");
+		if (session.hasLastAnnotation)
 		{
 			ImGui::Text("Last: %s %s (loss %.2f pawns)",
-						state.lastAnnotation.quality == MoveQuality::Blunder ? "BLUNDER" : "move",
-						state.lastAnnotation.san.c_str(), static_cast<float>(state.lastAnnotation.lossCp) / 100.0f);
+						session.lastAnnotation.quality == MoveQuality::Blunder ? "BLUNDER" : "move",
+						session.lastAnnotation.san.c_str(), static_cast<float>(session.lastAnnotation.lossCp) / 100.0f);
 		}
-		ImGui::Text("Intensity: %.2f (target: %.2f)", state.currentIntensity, state.targetIntensity);
-		ImGui::Text("Game over: %s", state.gameOver ? "yes" : "no");
+		ImGui::Text("Intensity: %.2f (target: %.2f)", session.currentIntensity, session.targetIntensity);
+		ImGui::Text("Game over: %s", session.gameOver ? "yes" : "no");
 	}
 } // namespace wchess

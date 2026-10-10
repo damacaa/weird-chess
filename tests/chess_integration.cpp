@@ -1,5 +1,5 @@
 // Gameplay integration test: plays a scripted game against the AI through the
-// components the scene uses (ChessState, ChessLibBoard, IChessAI, annotation
+// components the scene uses (ChessSessionState, ChessLibBoard, IChessAI, annotation
 // pipeline, NarratorThread + PassThroughNarrator) and checks the annotations,
 // story stream and game-over flow. No window/ECS required (the ECS-bound
 // pieces - moveSystem/inputSystem - are exercised by the running game).
@@ -11,9 +11,12 @@
 #include "chess/MinimaxAI.h"
 #include "chess/NullAI.h"
 #include "chess/StockfishUCIAI.h"
-#include "components/ChessState.h"
+#include "components/SessionState.h"
 #include "config.h"
 #include "globals.h"
+#include "narrator/LlamaNarrator.h"
+#include "narrator/PassThroughNarrator.h"
+#include "narrator/StoryStream.h"
 #include "systems/animationSystem.h"
 #include "systems/annotationSystem.h"
 #include "systems/narrativeRenderSystem.h"
@@ -615,7 +618,7 @@ static void testGameIntensity()
 
 	// 1. Starting position: calm, intensity near 0.0
 	{
-		ChessState state;
+		ChessSessionState state;
 		state.board = std::make_shared<ChessLibBoard>();
 		state.board->loadStartPosition();
 		float intensity = AnimationSystem::computeGameIntensity(state);
@@ -624,7 +627,7 @@ static void testGameIntensity()
 
 	// 2. Position with King in Check: should have significant check bonus
 	{
-		ChessState state;
+		ChessSessionState state;
 		state.board = std::make_shared<ChessLibBoard>();
 		// Black king on e8 in check from White Queen on e7
 		state.board->setFen("4k3/4Q3/8/8/8/8/8/4K3 b - - 0 1");
@@ -634,7 +637,7 @@ static void testGameIntensity()
 
 	// 3. Checkmate position: maximum intensity 1.0
 	{
-		ChessState state;
+		ChessSessionState state;
 		state.board = std::make_shared<ChessLibBoard>();
 		// Fool's mate: Black checkmated
 		state.board->setFen("rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3");
@@ -775,7 +778,8 @@ static void testNarrativeVerification()
 
 	// 2. Verify low-material / lone King constraints in prompt and action descriptions
 	CHECK(prompt.find("Captain Flint is severely depleted, fighting alone for survival") != std::string::npos);
-	CHECK(prompt.find("Do NOT use army-scale descriptors for Captain Flint like 'disciplined lines', 'formations', 'reserves', or 'contingents'") != std::string::npos);
+	CHECK(prompt.find("Do NOT use army-scale descriptors for Captain Flint like 'disciplined lines', 'formations', "
+					  "'reserves', or 'contingents'") != std::string::npos);
 
 	std::string pieceAction = LlamaNarrator::testDescribePieceAction(ann, "Captain Flint", "Admiral Drake");
 	printf("[Lone King Action Translation]: Flint %s\n", pieceAction.c_str());
@@ -795,8 +799,10 @@ static void testNarrativeVerification()
 
 	std::string mateEpiloguePrompt = llama.testBuildEpiloguePrompt("Drake struck the final blow.", 90, checkmateAnn);
 	printf("\n[Checkmate Epilogue Prompt]:\n%s\n", mateEpiloguePrompt.c_str());
-	CHECK(mateEpiloguePrompt.find("Admiral Drake has delivered the final blow and won the match.") != std::string::npos);
-	CHECK(mateEpiloguePrompt.find("Write 1-2 vivid, dramatic concluding sentences providing thematic closure") != std::string::npos);
+	CHECK(mateEpiloguePrompt.find("Admiral Drake has delivered the final blow and won the match.") !=
+		  std::string::npos);
+	CHECK(mateEpiloguePrompt.find("Write 1-2 vivid, dramatic concluding sentences providing thematic closure") !=
+		  std::string::npos);
 
 	MoveAnnotation stalemateAnn = ann;
 	stalemateAnn.mover = Color::White;
@@ -807,7 +813,8 @@ static void testNarrativeVerification()
 	std::string staleEpiloguePrompt = llama.testBuildEpiloguePrompt("Drake boxed Flint in.", 90, stalemateAnn);
 	printf("\n[Stalemate Epilogue Prompt]:\n%s\n", staleEpiloguePrompt.c_str());
 	CHECK(staleEpiloguePrompt.find("ending in an unresolved, bitter stalemate") != std::string::npos);
-	CHECK(staleEpiloguePrompt.find("Write 1-2 vivid, dramatic concluding sentences providing thematic closure") != std::string::npos);
+	CHECK(staleEpiloguePrompt.find("Write 1-2 vivid, dramatic concluding sentences providing thematic closure") !=
+		  std::string::npos);
 	printf(">> Epilogue prompts for Checkmate and Stalemate verified.\n");
 
 	// 4. Live execution: Run live turns and verify no consecutive duplicate sentences & epilogue generation
@@ -818,10 +825,12 @@ static void testNarrativeVerification()
 
 	std::vector<std::string> generatedSentences;
 	auto initialHistory = llama.getStoryHistory();
-	for (const auto& s : initialHistory) generatedSentences.push_back(s);
+	for (const auto& s : initialHistory)
+		generatedSentences.push_back(s);
 
 	// Simulate 6 live turns with Llama model inference
-	struct TurnMock {
+	struct TurnMock
+	{
 		PieceType piece;
 		Color mover;
 		bool check;
@@ -839,8 +848,7 @@ static void testNarrativeVerification()
 		{PieceType::Knight, Color::White, false, false, false, GameState::Ongoing, 16, 16, MoveQuality::Best},
 		{PieceType::Knight, Color::Black, false, false, false, GameState::Ongoing, 16, 16, MoveQuality::Good},
 		{PieceType::Queen, Color::White, true, false, false, GameState::Ongoing, 16, 1, MoveQuality::Great},
-		{PieceType::Queen, Color::White, false, true, true, GameState::Checkmate, 16, 1, MoveQuality::Best}
-	};
+		{PieceType::Queen, Color::White, false, true, true, GameState::Checkmate, 16, 1, MoveQuality::Best}};
 
 	int moveNum = 1;
 	for (const auto& tm : turns)
@@ -878,8 +886,8 @@ static void testNarrativeVerification()
 	CHECK(finalHistory.size() >= 3);
 	std::string lastSentence = finalHistory.back();
 	CHECK(!lastSentence.empty());
-	printf(">> Live story generated %zu sentences without duplicates. Epilogue produced: \"%s\"\n",
-		   finalHistory.size(), lastSentence.c_str());
+	printf(">> Live story generated %zu sentences without duplicates. Epilogue produced: \"%s\"\n", finalHistory.size(),
+		   lastSentence.c_str());
 }
 
 int main(int argc, char** argv)
@@ -895,7 +903,7 @@ int main(int argc, char** argv)
 	testNarratorContext();
 	testNarrativeVerification();
 
-	ChessState state;
+	ChessSessionState state;
 	state.board = std::make_shared<ChessLibBoard>();
 	state.board->loadStartPosition();
 

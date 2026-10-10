@@ -5,7 +5,7 @@
 // coordinates. The board lives in world space; the camera is framed so the
 // board occupies the left half of the window (see systems/layoutSystem.h).
 
-#include "components/ChessState.h"
+#include "components/BoardState.h"
 #include "components/SquareComp.h"
 #include "config.h"
 #include "globals.h"
@@ -132,7 +132,7 @@ namespace wchess
 
 		// Creates the 64 square entities + pool of legal move overlays (cyan) + dedicated overlays for
 		// selection (green), last move (yellow), and check (red).
-		inline std::vector<Entity> createBoard(Registry& registry, ShapeService& shapes, ChessState& state)
+		inline std::vector<Entity> createBoard(Registry& registry, ShapeService& shapes, ChessBoardState& board)
 		{
 			std::vector<Entity> squares;
 			squares.reserve(64);
@@ -155,27 +155,27 @@ namespace wchess
 			// Pool of legal target overlays (Cyan, fixed color).
 			// A piece in chess can have at most 27 legal moves (e.g. Queen in center),
 			// so a pool of 28 is sufficient for all possible legal move destinations.
-			state.highlightEntities.clear();
-			state.highlightEntities.reserve(ChessConfig::MAX_TARGET_HIGHLIGHTS);
+			board.highlightEntities.clear();
+			board.highlightEntities.reserve(ChessConfig::MAX_TARGET_HIGHLIGHTS);
 			for (int i = 0; i < ChessConfig::MAX_TARGET_HIGHLIGHTS; ++i)
 			{
 				Entity highlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_CYAN_MATERIAL_IDX);
 				registry.setComponentDirty(registry.getComponent<Shape>(highlight));
-				state.highlightEntities.push_back(highlight);
+				board.highlightEntities.push_back(highlight);
 			}
 
 			// Dedicated overlays with fixed colors so no shader recompilation is needed
-			state.selectionHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_GREEN_MATERIAL_IDX);
-			registry.setComponentDirty(registry.getComponent<Shape>(state.selectionHighlight));
+			board.selectionHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_GREEN_MATERIAL_IDX);
+			registry.setComponentDirty(registry.getComponent<Shape>(board.selectionHighlight));
 
-			state.lastMoveFromHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_YELLOW_MATERIAL_IDX);
-			registry.setComponentDirty(registry.getComponent<Shape>(state.lastMoveFromHighlight));
+			board.lastMoveFromHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_YELLOW_MATERIAL_IDX);
+			registry.setComponentDirty(registry.getComponent<Shape>(board.lastMoveFromHighlight));
 
-			state.lastMoveToHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_YELLOW_MATERIAL_IDX);
-			registry.setComponentDirty(registry.getComponent<Shape>(state.lastMoveToHighlight));
+			board.lastMoveToHighlight = createHighlightShape(shapes, ChessPalette::HIGHLIGHT_YELLOW_MATERIAL_IDX);
+			registry.setComponentDirty(registry.getComponent<Shape>(board.lastMoveToHighlight));
 
-			state.checkHighlight = createHighlightShape(shapes, ChessPalette::CHECK_RED_MATERIAL_IDX);
-			registry.setComponentDirty(registry.getComponent<Shape>(state.checkHighlight));
+			board.checkHighlight = createHighlightShape(shapes, ChessPalette::CHECK_RED_MATERIAL_IDX);
+			registry.setComponentDirty(registry.getComponent<Shape>(board.checkHighlight));
 
 			return squares;
 		}

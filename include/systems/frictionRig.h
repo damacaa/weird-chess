@@ -7,7 +7,7 @@
 // rail. AnimationSystem sets its tangential speed to the desired friction level
 // and the engine turns the resulting contact into a continuous friction voice.
 
-#include "components/ChessState.h"
+#include "components/BoardState.h"
 #include "globals.h"
 
 namespace wchess
@@ -33,9 +33,10 @@ namespace wchess
 		// so this speed reproduces the old 0..1 manual level one-to-one.
 		inline constexpr float SPEED_PER_LEVEL = 1000.0f;
 
-		inline void create(Registry& registry, ServiceProvider& services, ChessState& state)
+		inline void create(Registry& registry, ServiceProvider& services)
 		{
-			state.frictionRail =
+			ChessBoardState& board = getBoardState(registry);
+			board.frictionRail =
 				services.shapes().addShape({.shapeId = DefaultShapes::Box,
 											.variables = {{DefaultShapes::Box::PosX, RAIL_X},
 														  {DefaultShapes::Box::PosY, RAIL_Y},
@@ -46,26 +47,27 @@ namespace wchess
 
 			// No Shape or Dot component: the proxy is never rendered, only
 			// simulated against the rail.
-			state.frictionBall = registry.createEntity();
-			auto& transform = registry.addComponent<Transform>(state.frictionBall);
+			board.frictionBall = registry.createEntity();
+			auto& transform = registry.addComponent<Transform>(board.frictionBall);
 			transform.position = vec3(RAIL_X, RAIL_TOP_Y + BALL_RADIUS - CONTACT_PENETRATION, 0.0f);
-			registry.addComponent<RigidBody2D>(state.frictionBall);
+			registry.addComponent<RigidBody2D>(board.frictionBall);
 		}
 
 		// level: 0.0 (silent) to 1.0 (full-scale friction voice)
-		inline void setLevel(Registry& registry, ChessState& state, float level)
+		inline void setLevel(Registry& registry, float level)
 		{
-			if (state.frictionBall == INVALID_ENTITY)
+			ChessBoardState& board = getBoardState(registry);
+			if (board.frictionBall == INVALID_ENTITY)
 				return;
 
-			auto& rb = registry.getComponent<RigidBody2D>(state.frictionBall);
+			auto& rb = registry.getComponent<RigidBody2D>(board.frictionBall);
 			rb.velocity = vec2(std::clamp(level, 0.0f, 1.0f) * SPEED_PER_LEVEL, 0.0f);
 			registry.setComponentDirty(rb);
 
 			// Re-pin the proxy on the rail every frame. The reported velocity
 			// drives the friction voice while the position keeps the contact
 			// continuous: no START/END flicker, no impact sounds, no drift.
-			auto& transform = registry.getComponent<Transform>(state.frictionBall);
+			auto& transform = registry.getComponent<Transform>(board.frictionBall);
 			transform.position.x = RAIL_X;
 			transform.position.y = RAIL_TOP_Y + BALL_RADIUS - CONTACT_PENETRATION;
 			registry.setComponentDirty(transform);

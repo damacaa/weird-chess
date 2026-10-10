@@ -315,6 +315,22 @@ namespace wchess
 				setPiecePosition(registry, piece, vec2(-1000.0f, -1000.0f));
 		}
 
+		// True while any piece is mid move-animation. Drives the AI gating and
+		// the capture-removal timing (there is no animation list to inspect).
+		inline bool anyPieceAnimating(Registry& registry)
+		{
+			bool any = false;
+			registry.forEach<PieceComp>([&](Entity, PieceComp& pc) { any = any || pc.animating; });
+			return any;
+		}
+
+		// Cancels every running piece animation (used before a new move /
+		// reset so no stale lerp survives).
+		inline void clearAllAnimations(Registry& registry)
+		{
+			registry.forEach<PieceComp>([](Entity, PieceComp& pc) { pc.animating = false; });
+		}
+
 		// Pre-allocates the 32 standard starting pieces parked off-screen at (-1000, -1000).
 		inline void initPiecePool(Registry& registry, ShapeService& shapes, std::vector<Entity>& outPieces, float scale)
 		{
@@ -327,7 +343,6 @@ namespace wchess
 				auto& pc = registry.addComponent<PieceComp>(entity);
 				pc.color = color;
 				pc.type = type;
-				pc.squareIndex = -1;
 				registry.setComponentDirty(pc);
 				outPieces.push_back(entity);
 			};
